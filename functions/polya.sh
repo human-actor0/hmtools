@@ -73,16 +73,31 @@ cluster(){
 	cat $tmpd/c.bed $tmpd/b.bed
 }
 
+MIND=50
+_countbed(){
+	intersectBed -a $1 -b $2 -wa -wb -s \
+	| awk -v OFS="\t" '{ print $1,$2,$3,$4,$5,$6,$11;}' \
+	| groupBy -g 1,2,3,4,6 -c 7 -o sum \
+	| awk -v OFS="\t" '{ print $1,$2,$3,$4,$6,$5;}'  
+}
 _precompare(){
-	sort -k1,1 -k2,3n $1 \
-	| intersectBed -a stdin -b $2 -wa -wb -s \
-	| groupBy -g 1,2,3,4,5,6 -c 8,11 -o collapse,collapse \
-	| intersectBed -a stdin -b $3 -wa -wb -s \
+	#mkdir -p tmpd; tmpd="tmpd";
+	tmpd=`make_tempdir`;
+	cat $1 > $tmpd/t; cat $2 > $tmpd/a; cat $3 > $tmpd/b	
+	## make clusters w/ the pooled
+	cat $tmpd/a $tmpd/b | sum_score - | cluster - $4 > $tmpd/c
+	## recount per cluster
+	_countbed $tmpd/c $tmpd/a > $tmpd/ca
+	_countbed $tmpd/c $tmpd/b > $tmpd/cb
+	intersectBed -a $tmpd/t -b $tmpd/ca -wa -wb -s \
+	| groupBy -g 1,2,3,4,5,6 -c 10,11 -o collapse,collapse  \
+	| intersectBed -a stdin -b $tmpd/cb -wa -wb -s \
 	| groupBy -g 1,2,3,4,5,6,7,8 -c 10,13 -o collapse,collapse \
 	| awk -v OFS="\t" '{ print $1"@"$2"@"$3"@"$4"@"$5"@"$6,$7,$8,$9,$10;}'
 }
 compare(){
-	_precompare $1 $2 $3 | test_lineartrend - \
+	if [ $# -ne 4 ]; then echo "$FUNCNAME: incorrect arguments"; return; fi
+	_precompare $1 $2 $3 $4 | test_lineartrend - \
 	| tr "@" "\t" \
 	| awk -v OFS="\t" '{ if($6 == "-"){ $(NF-1) = - $(NF-1);} print $0;}'
 }
@@ -133,9 +148,9 @@ chr1	7	8	.	20	-
 chr1	99	100	.	1	-" > b.bed
 
 echo \
-"chr1	1	200	g1	0	-	5,7,99	1,2,3	5,7,99	100,20,1	0.603335	1.26652022203e-11" > exp
+"chr1	1	200	g1	0	-	5,99	3,3	5,99	120,1	0.597334	2.01324512616e-11" > exp
 
-compare c.bed a.bed b.bed > obs
+compare c.bed a.bed b.bed 50 > obs
 check exp obs
 rm a.bed b.bed c.bed exp obs
 
