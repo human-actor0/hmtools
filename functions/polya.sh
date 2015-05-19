@@ -173,4 +173,4 @@ rm exp obs
 
 }
 
-typeset -F
+#typeset -F
