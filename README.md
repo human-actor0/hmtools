@@ -5,5 +5,5 @@ hyunmin's bioinformatics tools
 * BEDTools > v2.0
 * Samtools > v1.2
 
-## Or, just start (귀찮이들을 위해)
+## Or, start with Docker (귀찮이들을 위해)
 * Docker version: https://registry.hub.docker.com/u/oannes/hmtools/
