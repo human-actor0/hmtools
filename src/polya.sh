@@ -73,7 +73,6 @@ cluster(){
 	cat $tmpd/c.bed $tmpd/b.bed
 }
 
-MIND=50
 _countbed(){
 	intersectBed -a $1 -b $2 -wa -wb -s \
 	| awk -v OFS="\t" '{ print $1,$2,$3,$4,$5,$6,$11;}' \
