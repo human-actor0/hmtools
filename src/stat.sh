@@ -1,5 +1,5 @@
 #!/bin/bash
-. $HM/functions/root.sh
+. $HMHOME/src/root.sh
 
 test_lineartrend(){
 cmd='

@@ -1,0 +1,26 @@
+#!/bin/bash
+usage="
+hm <commands>:
+	<commands>:
+	- polyaseq ..
+"
+if [ $# -lt 1 ];then
+	echo "$usage"; exit 1;
+fi
+
+
+polyaseq(){
+usage="
+$0 $FUNCNAME <input>
+" if [ $# -lt 1 ];then echo "$usage"; return;	fi
+	echo "running polyaseq .."
+	. $HMHOME/functions/polya.sh
+#	samtools view -bq 10 data/hg19chr22sample.bam | bamToBed | modify_score - count |  point - | filter - /mnt/db/Ucsc/hg19/kj6
+	
+}
+
+
+if [ $1 = "polyaseq" ];then
+	eval $1 ${@:2}
+fi
+

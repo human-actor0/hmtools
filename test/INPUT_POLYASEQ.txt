@@ -1,0 +1,4 @@
+BAM="
+$HMHOME/data/
+
+"

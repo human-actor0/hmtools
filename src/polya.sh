@@ -1,6 +1,6 @@
 #!/bin/bash  
-. $HM/functions/root.sh # import utilities 
-. $HM/functions/stat.sh # import test_lineartrend
+. $HMHOME/src/root.sh # import utilities 
+. $HMHOME/src/stat.sh # import test_lineartrend
 
 SEQ=$HM/standalones/seq.sh
 FILTER=$HM/standalones/pa_filter_nb.sh
