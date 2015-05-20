@@ -33,11 +33,13 @@ cmd='
 	my %seq=();
 	my $chrom="";
    	open (F, "FA") or die "$!";
-    while(<F>){ chomp;
+	    while(<F>){ chomp;
 		if($_=~/>([\w|\d]+)/){ $chrom=$1; next;}
-        $seq{$chrom} .= $_;
-    } close(F);
-	while(<STDIN>){ chomp; my @a=split /\t/,$_;
+		$seq{$chrom} .= $_;
+	    }
+	close(F);
+	open (F,"BED") or die "$!";
+	while(<F>){ chomp; my @a=split /\t/,$_;
 		my $sseq = substr($seq{$a[0]},$a[1],$a[2]-$a[1]);	
 		my $sseq_left="";my $sseq_right="";
 		if(STRAND==0 || $a[5] eq "+"){
@@ -50,35 +52,24 @@ cmd='
 		}
 		print $_,"\t",uc $sseq_left,",",uc $sseq,",",uc $sseq_right,"\n";
 	}
+	close(F);
 	'			
 	cmd=${cmd//LEFT/$LEFT};
 	cmd=${cmd//RIGHT/$RIGHT};
 	cmd=${cmd//STRAND/$STRAND};
 
-	tmpd=tmpd; mkdir -p $tmpd
-	mycat $FA | awk -v O=$tmpd '{
-		if(substr($0,1,1)==">"){ CHROM=substr($0,2,length($0));} 
-		fout=O"/"CHROM; print $0 >> fout;
-	}'
-
-	
-#	FA=${FA%\/}
-#	if [ -f $FA ]; then
-#		cmd=${cmd//BED/$BED};
-#		cmd=${cmd//FA/$FA};
-#		cat $BED | perl -e "$cmd"
-#	elif [ -d $FA ]; then
-#		tmpd=`make_tempdir`;
-#		for f in `split_by_chrom $BED $tmpd`;do
-#			chrom=${f##*/};
-#			echo "$f $chrom"
-#			fa=$FA/$chrom.fa
-#			if [ -f $fa ]; then
-#				cmd1=$cmd;
-#				cmd1=${cmd1//BED/$tmp_bed};
-#				cmd1=${cmd1//FA/$fa};
-#				awk -v CHROM=$chrom '$1==CHROM' $f \
-#				| perl -e "$cmd1" 
-#			fi
-#		done
-#	fi
+	tmpd=`make_tempdir`;
+	for f in `split_by_chrom $BED $tmpd`;do
+		chrom=${f##*/};
+		fa=`ls  $FA* | grep $chrom.fa`;
+		if [ -f $fa ];then
+			fa1=$tmpd/$chrom.fa
+			mycat $fa > $fa1
+			cmd1=$cmd;
+			cmd1=${cmd1//BED/$f};
+			cmd1=${cmd1//FA/$fa1};
+			perl -e "$cmd1"
+		else
+			echo "$fa not exist" >&2
+		fi
+	done
