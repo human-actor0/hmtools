@@ -1,4 +1,8 @@
-BAM="
-$HMHOME/data/
-
-"
+NAME=(
+	helaCtrAso_140128
+	helaU1Aso_140128
+)
+BAM=(
+ 	/mnt/db/bams/polyaseq/HelapA_140128_CTRL_ASO_R1/a.bam
+ 	/mnt/db/bams/polyaseq/HelapA_140128_U1_ASO_R1/a.bam
+)

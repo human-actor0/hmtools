@@ -1,5 +1,5 @@
 #!/bin/bash 
-. $HMHOME/functions/root.sh
+. $HMHOME/src/root.sh
 usage="
 USAGE: $0 [options] <bed> <fasta|dir> 
 	[options]:
@@ -54,23 +54,31 @@ cmd='
 	cmd=${cmd//LEFT/$LEFT};
 	cmd=${cmd//RIGHT/$RIGHT};
 	cmd=${cmd//STRAND/$STRAND};
-	FA=${FA%\/}
-	if [ -f $FA ]; then
-		cmd=${cmd//BED/$BED};
-		cmd=${cmd//FA/$FA};
-		cat $BED | perl -e "$cmd"
-	elif [ -d $FA ]; then
-		tmpd=`make_tempdir`;
-		for f in `split_by_chrom $BED $tmpd`;do
-			chrom=${f##*/};
-			echo "$f $chrom"
-			fa=$FA/$chrom.fa
-			if [ -f $fa ]; then
-				cmd1=$cmd;
-				cmd1=${cmd1//BED/$tmp_bed};
-				cmd1=${cmd1//FA/$fa};
-				awk -v CHROM=$chrom '$1==CHROM' $f \
-				| perl -e "$cmd1" 
-			fi
-		done
-	fi
+
+	tmpd=tmpd; mkdir -p $tmpd
+	mycat $FA | awk -v O=$tmpd '{
+		if(substr($0,1,1)==">"){ CHROM=substr($0,2,length($0));} 
+		fout=O"/"CHROM; print $0 >> fout;
+	}'
+
+	
+#	FA=${FA%\/}
+#	if [ -f $FA ]; then
+#		cmd=${cmd//BED/$BED};
+#		cmd=${cmd//FA/$FA};
+#		cat $BED | perl -e "$cmd"
+#	elif [ -d $FA ]; then
+#		tmpd=`make_tempdir`;
+#		for f in `split_by_chrom $BED $tmpd`;do
+#			chrom=${f##*/};
+#			echo "$f $chrom"
+#			fa=$FA/$chrom.fa
+#			if [ -f $fa ]; then
+#				cmd1=$cmd;
+#				cmd1=${cmd1//BED/$tmp_bed};
+#				cmd1=${cmd1//FA/$fa};
+#				awk -v CHROM=$chrom '$1==CHROM' $f \
+#				| perl -e "$cmd1" 
+#			fi
+#		done
+#	fi
