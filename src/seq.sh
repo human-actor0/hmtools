@@ -22,7 +22,7 @@ shift $(( OPTIND - 1 ))
 if [ $# -ne 2 ]; then
 	echo "$usage"; exit 1;
 fi
-BED=$1; FA=$2;
+BED=$1; FA=$2; 
 cmd='
 	use strict;
 	sub revComp{

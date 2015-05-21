@@ -1,0 +1,4 @@
+. $HMHOME/src/polya.sh ; cat /mnt/db/Ucsc/hg19/ensGene.bed \
+| bed12_to_lastexon - | merge_by_gene - | gzip -c - > hg19_ensGene3utr.bed.gz
+
+

@@ -1,26 +1,26 @@
 #!/bin/bash
+if [[ ! -z $HMHOME || $HMHOME = "" ]];then
+	HMHOME=`pwd`; 
+	echo "
+## added by hmtools
+	HMHOME=$HMHOME; export HMHOME;
+	PATH=\$PATH:\$HMHOME; export PATH;
+## end hmtools" >> ~/.bash_profile
+fi
+
+. $HMHOME/src/polya.sh
 usage="
 hm <commands>:
 	<commands>:
-	- polyaseq ..
+	 batch_polya : one click batch program
 "
-if [ $# -lt 1 ];then
-	echo "$usage"; exit 1;
+if [[ $# -lt 1 || ! -z $1 ]];then
+	echo "$usage"; 
 fi
 
 
-polyaseq(){
-usage="
-$0 $FUNCNAME <input>
-" if [ $# -lt 1 ];then echo "$usage"; return;	fi
-	echo "running polyaseq .."
-	. $HMHOME/functions/polya.sh
-#	samtools view -bq 10 data/hg19chr22sample.bam | bamToBed | modify_score - count |  point - | filter - /mnt/db/Ucsc/hg19/kj6
-	
-}
-
-
-if [ $1 = "polyaseq" ];then
+if [[ $1 = "batch_polya" ]];then
+	echo "$@"
 	eval $1 ${@:2}
 fi
 

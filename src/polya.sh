@@ -2,13 +2,23 @@
 . $HMHOME/src/root.sh # import utilities 
 . $HMHOME/src/stat.sh # import test_lineartrend
 
-SEQ=$HM/standalones/seq.sh
-FILTER=$HM/standalones/pa_filter_nb.sh
-FILTER_M=$HM/standalones/nb.model
+SEQ=$HMHOME/src/seq.sh
+FILTER=$HMHOME/src/pa_filter_nb.sh
+FILTER_M=$HMHOME/src/nb.model
 HG19FA=/mnt/db/Ucsc/hg19/
-CLUSTER=$HM/standalones/cluster_1d_kmeans.sh
+CLUSTER=$HMHOME/src/cluster_1d_kmeans.sh
+BW=$HMHOME/bin/bedGraphToBigWig
 
 ## take 3' end point, then switch strand, and then sum scores
+
+bw(){
+	PA=$1; CSIZE=$2; OUT=$3;
+	tmpd=`make_tempdir`
+	cat $PA | awk -v OFS="\t" '{if($6=="+"){ print $1,$2,$3,$5;}}' | sort -k1,1 -k2,3n > $tmpd/a
+	eval $BW $tmpd/a $CSIZE ${OUT}_fwd.bw; 
+	cat $PA | awk -v OFS="\t" '{if($6=="-"){ print $1,$2,$3,$5;}}' | sort -k1,1 -k2,3n > $tmpd/b
+	eval $BW $tmpd/b $CSIZE ${OUT}_bwd.bw
+}
 
 point(){
 	awk -v OFS="\t" '{ 
@@ -80,9 +90,9 @@ _countbed(){
 	| awk -v OFS="\t" '{ print $1,$2,$3,$4,$6,$5;}'  
 }
 _precompare(){
-	#mkdir -p tmpd; tmpd="tmpd";
-	tmpd=`make_tempdir`;
-	cat $1 > $tmpd/t; cat $2 > $tmpd/a; cat $3 > $tmpd/b	
+	mkdir -p tmpd; tmpd="tmpd";
+	#tmpd=`make_tempdir`;
+	mycat $1 > $tmpd/t; mycat $2 > $tmpd/a; mycat $3 > $tmpd/b	
 	## make clusters w/ the pooled
 	cat $tmpd/a $tmpd/b | sum_score - | cluster - $4 > $tmpd/c
 	## recount per cluster
@@ -91,16 +101,54 @@ _precompare(){
 	intersectBed -a $tmpd/t -b $tmpd/ca -wa -wb -s \
 	| groupBy -g 1,2,3,4,5,6 -c 10,11 -o collapse,collapse  \
 	| intersectBed -a stdin -b $tmpd/cb -wa -wb -s \
-	| groupBy -g 1,2,3,4,5,6,7,8 -c 10,13 -o collapse,collapse \
+	| groupBy -g 1,2,3,4,5,6,7,8 -c 12,13 -o collapse,collapse \
 	| awk -v OFS="\t" '{ print $1"@"$2"@"$3"@"$4"@"$5"@"$6,$7,$8,$9,$10;}'
 }
-compare(){
-	if [ $# -ne 4 ]; then echo "$FUNCNAME: incorrect arguments"; return; fi
-	_precompare $1 $2 $3 $4 | test_lineartrend - \
+compare_lineartrend(){
+usage="$FUNCNAME <target> <polya_trt> <polya_ctr> <mind>";
+	if [ $# -ne 4 ]; then echo "$usage"; return; fi
+	_precompare $1 $2 $3 $4 \
+	| test_lineartrend - \
 	| tr "@" "\t" \
 	| awk -v OFS="\t" '{ if($6 == "-"){ $(NF-1) = - $(NF-1);} print $0;}'
 }
 
+batch_polya(){ 
+usage="$FUNCNAME <batchscript> [test]"
+	if [ $# -lt 1 ];then echo "$usage"; return; fi
+	eval `cat $1`;# read input env
+	if [ -d $OUT ];then
+		echo "$OUT exists. overriding on this .. " >&2
+	fi
+	mkdir -p $OUT/comp $OUT/point
+	## todo: check files I trust you
+#	for (( i=0; i < ${#BAM[@]}; i+=2 ));do
+#		name=${BAM[$i]}; bam=${BAM[$i+1]};
+#		outd=$OUT/point/$name; mkdir -p $outd
+#		if [[ $# -gt 1 &&  $2 = "test" ]];then
+#			TEST="head -n 10000"
+#		fi
+#		echo "running $bam => $outd/a.bed .. " >&2
+#		samtools view -bq 10 $bam | bamToBed \
+#		| $TEST \
+#		| point \
+#		| modify_score - "count" | sum_score - \
+#		| filter - $FASTA > $outd/a.bed 
+#	done
+	if [[ -f $TARGET && ${#COMP[@]} -gt 1 ]];then
+		for (( i=0; i < ${#COMP[@]}; i+=2 ));do
+			point1=$OUT/point/${COMP[$i]}/a.bed
+			point2=$OUT/point/${COMP[$i+1]}/a.bed
+			outd=$OUT/comp/${COMP[$i]}_vs_${COMP[$i+1]}; mkdir -p $outd;
+
+			echo "comparing ${COMP[$i]} vs ${COMP[$i+1]}, MDIST=$MDIST => $outd/lineartrend.txt " >&2
+			compare_lineartrend $TARGET $point2 $point1 $MDIST > $outd/lineartrend.txt
+		done
+	else
+		echo "$TAGRET not exists">&2
+	fi
+	
+}
 
 ###########################################################
 # test 
@@ -149,7 +197,7 @@ chr1	99	100	.	1	-" > b.bed
 echo \
 "chr1	1	200	g1	0	-	5,99	3,3	5,99	120,1	0.597334	2.01324512616e-11" > exp
 
-compare c.bed a.bed b.bed 50 > obs
+compare_lineartrend c.bed a.bed b.bed 50 > obs
 check exp obs
 rm a.bed b.bed c.bed exp obs
 

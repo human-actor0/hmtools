@@ -1,14 +1,14 @@
 #!/bin/bash
 
 mycat(){
-        if [ ${1##*.} = "gz" ];then
-                gunzip -dc $1
-        elif [ ${1##*.} = "bz2" ];then
-                bunzip2 -dc $1
-        elif [ ${1##*.} = "zip" ];then
-                unzip -p $1
+        if [[ ${1##*.} = "gz" ]];then
+                gunzip -dc $1;
+        elif [[ ${1##*.} = "bz2" ]];then
+                bunzip2 -dc $1;
+        elif [[ ${1##*.} = "zip" ]];then
+                unzip -p $1;
         else
-                cat $1
+                cat $1;
         fi
 }
 
@@ -59,6 +59,32 @@ sum_score(){
 		| awk -v OFS="\t" '{ print $1,$2,$3,".",$5,$4;}'
 	done
 }
+
+bed12_to_lastexon(){
+## not tested
+	awk -v OFS="\t" '{ split($11,sizes,",");split($12,starts,",");
+	    if($6=="+"){ i=$10;}else{ i=1;}
+	    s=$2+starts[i]; e=s+sizes[i];
+	    print $1,s,e,$4,i,$6;
+	}' $1
+}
+
+merge_by_gene(){
+## not tested
+        perl -ne 'chomp;my @a=split/\t/,$_;
+                $a[0]=$a[0]."@".$a[3];  ## avoid merging different genes
+                $a[4]=0; 
+                print join("\t",@a),"\n";' \
+        | sort -k1,1 -k2,3n -k6,6 \
+        | mergeBed -i stdin -s -c 4,5,6 -o distinct,count,distinct \
+        | awk -v OFS="\t" '{ split($1,a,"@");$1=a[1];print $0;}'
+}
+get3utr(){
+        #cat $1 | gtf_to_bed12.sh |bed12_to_lastexon.sh | perl -ne 'chomp;my @a=split/\t/,$_;
+        cat $1 | bed12_to_lastexon.sh | mergeByGene
+}
+
+
 
 
 ###########################################################

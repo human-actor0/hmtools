@@ -15,7 +15,7 @@ def test_lineartrend(x1,y1,x2,y2):
 	for i in range(len(x1)):
 			for j in range(y1[i]):
 				sx.append(x1[i]);
-				sy.append(1);
+				sy.append(1); 
 	for i in range(len(x2)):
 			for j in range(y2[i]):
 				sx.append(x2[i]);

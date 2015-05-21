@@ -1,8 +1,12 @@
-NAME=(
-	helaCtrAso_140128
-	helaU1Aso_140128
-)
+FASTA=/mnt/db/ucsc/hg19/chromosome/
 BAM=(
- 	/mnt/db/bams/polyaseq/HelapA_140128_CTRL_ASO_R1/a.bam
- 	/mnt/db/bams/polyaseq/HelapA_140128_U1_ASO_R1/a.bam
+	helaCtrAso_140128 /mnt/db/bams/polyaseq/HelapA_140128_CTRL_ASO_R1/a.bam
+ 	helaU1Aso_140128 /mnt/db/bams/polyaseq/HelapA_140128_U1_ASO_R1/a.bam
 )
+TARGET=$HMHOME/data/hg19_ensGene3utr.bed.gz
+COMP=(
+	helaU1Aso_140128 helaCtrAso_140128 
+)
+
+OUT=out
+MDIST=50 #minimum distance between peak centers
