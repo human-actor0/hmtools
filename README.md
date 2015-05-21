@@ -1,5 +1,10 @@
-# hmtools
-hyunmin's bioinformatics tools
+HMTools
+=======
+>This is a collection of Hyun min's bioinformatics tools (human.gim@gmail.com)
+>Focusing on sevral projcects:
+- alternative polyadenylation
+- alternative splicing
+- patterns of RNA polymerase II (CTD) 
 
 ## Prerequisite (이거 미리 깔고 합시다)
 * BEDTools > v2.0
@@ -18,7 +23,9 @@ hyunmin's bioinformatics tools
  > hm  
  ## .... will see tools available
 ```
-## How to run
+
+## Run
+```
 # download genome files in 
  > cd <genome_dir>
  > wget --timestamping 'ftp://hgdownload.cse.ucsc.edu/goldenPath/hg19/chromosomes/*.fa.gz'
