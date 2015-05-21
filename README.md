@@ -6,32 +6,32 @@ HMTools
 - alternative splicing
 - patterns of RNA polymerase II (CTD) 
 
-## Prerequisite (이거 미리 깔고 합시다)
+## Prerequisite 
+* python: numpy, scipy
 * BEDTools > v2.0
 * Samtools > v1.2
-
-## Or, start with Docker (귀찮이들을 위해)
-* Docker version: https://registry.hub.docker.com/u/oannes/hmtools/
-
-## Install on linux 
-```
- > git https://github.com/actor0/hmtools.git
- > cp hmtools
- > hm
- > source ~/.bash_profile
- > cd .. 
- > hm  
- ## .... will see tools available
-```
-
-## Run
+* UCSC genome data
 ```
 # download genome files in 
  > cd <genome_dir>
  > wget --timestamping 'ftp://hgdownload.cse.ucsc.edu/goldenPath/hg19/chromosomes/*.fa.gz'
 ```
-# prepare BATCH file
+* Or, just use a docker image [docker/hmtools](https://registry.hub.docker.com/u/oannes/hmtools/)
+
+## Install on linux 
 ```
+ > git https://github.com/actor0/hmtools.git
+ > cp hmtools
+ > hm # this will setup paths and enviromnet variables
+ > source ~/.bash_profile
+ > cd .. 
+ > hm # this will guide you to the tools  
+```
+
+## Run
+# prepare a BATCH file
+```
+## BATCH.txt example
 FASTA=/mnt/db/Ucsc/hg19/chromosome/
 ## experimet name and bam files
 BAM=(
@@ -50,7 +50,7 @@ MDIST=50
 ## define output directory
 OUT=out
 ```
-# run
+# run it now !!
 ```
  > hm batch_polya BATCH.txt
 ```
