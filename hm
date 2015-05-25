@@ -1,13 +1,14 @@
 #!/bin/bash
-if [[ ! -z $HMHOME || $HMHOME = "" ]];then
+if [[ -z $HMHOME || $HMHOME = "" ]];then
 	HMHOME=`pwd`; 
-	echo "
+	echo "install hmtools .. ">&2
+	cmd="
 ## added by hmtools
 	HMHOME=$HMHOME; export HMHOME;
-	PATH=\$PATH:\$HMHOME; export PATH;
-## end hmtools" >> ~/.bash_profile
+	PATH=\$PATH:\$HMHOME:\$HMHOME/bin; export PATH;
+## end hmtools"
+	echo "$cmd" >> ~/.bash_profile
 fi
-
 . $HMHOME/src/polya.sh
 usage="
 hm <commands>:

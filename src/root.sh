@@ -26,6 +26,17 @@ make_tempdir(){
 	mktemp -d 2>/dev/null || mktemp -d -t 0;
 }
 
+run_R(){
+        cmd=$1;
+	tmpd=`make_tempdir`
+        tmpout=$tmpd/out;
+        cmd=${cmd/stdout/$tmpout}
+        echo "$cmd" > $tmpd/cmd
+        R --no-save -f $tmpd/cmd >&2;
+        cat $tmpout
+}
+
+
 split_by_chrom(){
 	awk -v OFS="\t" -v O=$2 '{
 		fout=O"/"$1;
