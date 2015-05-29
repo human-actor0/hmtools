@@ -37,38 +37,39 @@ HMTools
 ```
  1. download hmtools image   
 ```
- > docker pull oannes/hmtools:v0.2
+ > docker pull oannes/hmtools:v0.2.1
 
 ```
  1. start docker with a volume where your bam files and results will be saved
+> imagine your working dir is /workingdir at local computer
+bam files are in /workingdir/bams/control.bam  treatment.bam
+chromosome files are in /workingdir/chromosome/chr1.fa.gz chr2.fa.gz ... 
 ```
- > ...
+ > docker run -it -v /workingdir/ oannes/hmtools:v0.2.1 /bin/bash --login
+ # ls /workingdir/*  
 ```
 
 ## Run
-# prepare a BATCH file
+# prepare a BATCH.txt file
 ```
-## BATCH.txt example
-FASTA=/mnt/db/Ucsc/hg19/chromosome/
-## experimet name and bam files
+FASTA=/workindir/chromosome/
 BAM="
-helaCtrAso_140128 /mnt/db/bams/polyaseq/HelapA_140128_CTRL_ASO_R1/a.bam
-helaU1Aso_140128 /mnt/db/bams/polyaseq/HelapA_140128_U1_ASO_R1/a.bam
+control /workingdir/bams/control.bam 
+treatment /workingdir/bams/treatment.bam 
 "
 TARGET=$HMHOME/data/hg19_ensGene3utr.bed.gz
 
-## comparison plan: treatment vs control
 COMP="
-helaU1Aso_140128 helaCtrAso_140128
+treatment control 
 "
 
 ## define minimum distance between peak centers
 MDIST=20
 ## define output directory
-OUT=out
+OUT=/workdir/print_result_here
 ```
 # run it now !!
 ```
- > hm batch_polya BATCH.txt
+ # hm batch_polya BATCH.txt
 ```
 
