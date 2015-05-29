@@ -1,5 +1,6 @@
 #!/bin/bash  
 . $HMHOME/src/root.sh # import utilities 
+. $HMHOME/src/bed.sh #import utilities 
 . $HMHOME/src/stat.sh # import test_lineartrend
 
 SEQ=$HMHOME/src/seq.sh
@@ -9,15 +10,38 @@ HG19FA=/mnt/db/Ucsc/hg19/
 CLUSTER=$HMHOME/src/cluster_1d_kmeans.sh
 BW=$HMHOME/bin/bedGraphToBigWig
 
-## take 3' end point, then switch strand, and then sum scores
+targetscan(){
+usage="$FUNCNAME <miR_Family_Info.txt.zip> <ucsc:targetScanS.txt>";
+if [ $# -ne 2 ];then echo "$usage"; return; fi
+	## take 3' end point, then switch strand, and then sum scores
+	tmpd=`make_tempdir`;
+	#tmpd=tmpd;rm -rf $tmpd; mkdir -p $tmpd;
+	mycat $1 | tail -n+2 | cut -f 1,4 \
+	| perl -ne '$_=~s/\t[\w\d\.-]+:/\t/g; $_=~s/:\d+$//; print $_;' \
+	| sort -k1,1 > $tmpd/targetscan_to_mirbase.txt
+
+	mycat $2 | cut -f2-7 \
+	| perl -ne '$_=~s/\t[\w\d\.-]+:/\t/g; $_=~s/:\d+$//; print $_;' \
+	| sort -k4,4 > $tmpd/targetscan.bed 
+
+	join -1 4 -2 1 $tmpd/targetscan.bed $tmpd/targetscan_to_mirbase.txt \
+	| awk -v OFS="\t" '$7 ~ /hsa-/{ print $2,$3,$4,$7,$5,$6;}' 
+	rm -rf $tmpd
+}
+
 
 bw(){
-	PA=$1; CSIZE=$2; OUT=$3;
+	pa=$1; csize=$2; out=$3;
 	tmpd=`make_tempdir`
-	cat $PA | awk -v OFS="\t" '{if($6=="+"){ print $1,$2,$3,$5;}}' | sort -k1,1 -k2,3n > $tmpd/a
-	eval $BW $tmpd/a $CSIZE ${OUT}_fwd.bw; 
-	cat $PA | awk -v OFS="\t" '{if($6=="-"){ print $1,$2,$3,$5;}}' | sort -k1,1 -k2,3n > $tmpd/b
-	eval $BW $tmpd/b $CSIZE ${OUT}_bwd.bw
+	#tmpd="tmpd"; mkdir -p $tmpd;
+	sortBed -i $1 | cut -f1-6 > $tmpd/a
+
+	awk -v OFS="\t" '{if($6=="+"){ print $1,$2,$3,$5;}}' $tmpd/a > $tmpd/p
+	bedGraphToBigWig $tmpd/p $csize ${out}_fwd.bw; 
+
+	awk -v OFS="\t" '{if($6=="-"){ print $1,$2,$3,$5;}}' $tmpd/a > $tmpd/n 
+	bedGraphToBigWig $tmpd/n $csize ${out}_bwd.bw
+	rm -rf $tmpd;
 }
 
 point(){
@@ -81,6 +105,7 @@ cluster(){
                 }
         }' > $tmpd/c.bed
 	cat $tmpd/c.bed $tmpd/b.bed
+	rm -rf $tmpd
 }
 
 _countbed(){
@@ -90,9 +115,9 @@ _countbed(){
 	| awk -v OFS="\t" '{ print $1,$2,$3,$4,$6,$5;}'  
 }
 _precompare(){
-	mkdir -p tmpd; tmpd="tmpd";
-	#tmpd=`make_tempdir`;
-	mycat $1 > $tmpd/t; mycat $2 > $tmpd/a; mycat $3 > $tmpd/b	
+	#mkdir -p tmpd; tmpd="tmpd";
+	tmpd=`make_tempdir`;
+	mycat $1 > $tmpd/t; mycat $2 | cut -f1-6 > $tmpd/a; mycat $3 | cut -f1-6 > $tmpd/b	
 	## make clusters w/ the pooled
 	cat $tmpd/a $tmpd/b | sum_score - | cluster - $4 > $tmpd/c
 	## recount per cluster
@@ -103,6 +128,7 @@ _precompare(){
 	| intersectBed -a stdin -b $tmpd/cb -wa -wb -s \
 	| groupBy -g 1,2,3,4,5,6,7,8 -c 12,13 -o collapse,collapse \
 	| awk -v OFS="\t" '{ print $1"@"$2"@"$3"@"$4"@"$5"@"$6,$7,$8,$9,$10;}'
+	rm -rf $tmpd
 }
 compare_lineartrend(){
 usage="$FUNCNAME <target> <polya_trt> <polya_ctr> <mind>";
@@ -116,25 +142,33 @@ usage="$FUNCNAME <target> <polya_trt> <polya_ctr> <mind>";
 batch_polya(){ 
 usage="$FUNCNAME <batchscript> [test]"
 	if [ $# -lt 1 ];then echo "$usage"; return; fi
-	eval `cat $1`;# read input env
+	eval `cat $1 | perl -ne 'chomp;$_=~s/#.*//g; $_=~s/^\s+$//g; print $_,"\n" unless $_ eq "";'`
+	BAM=( $BAM )
+	COMP=( $COMP )
+	
 	if [ -d $OUT ];then
 		echo "$OUT exists. overriding on this .. " >&2
 	fi
-	mkdir -p $OUT/comp $OUT/point
+	mkdir -p $OUT/comp $OUT/point $OUT/bw
 	## todo: check files I trust you
-#	for (( i=0; i < ${#BAM[@]}; i+=2 ));do
-#		name=${BAM[$i]}; bam=${BAM[$i+1]};
-#		outd=$OUT/point/$name; mkdir -p $outd
-#		if [[ $# -gt 1 &&  $2 = "test" ]];then
-#			TEST="head -n 10000"
-#		fi
-#		echo "running $bam => $outd/a.bed .. " >&2
-#		samtools view -bq 10 $bam | bamToBed \
-#		| $TEST \
-#		| point \
-#		| modify_score - "count" | sum_score - \
-#		| filter - $FASTA > $outd/a.bed 
-#	done
+	get_chromsize ${BAM[1]} > $OUT/chrom.size	
+	for (( i=0; i < ${#BAM[@]}; i+=2 ));do
+		name=${BAM[$i]}; bam=${BAM[$i+1]};
+		outd=$OUT/point/$name; mkdir -p $outd
+		if [[ $# -gt 1 &&  $2 = "test" ]];then
+			TEST="head -n 10000";
+		else
+			TEST="cat";	
+		fi
+		echo "running $bam => $outd/a.bed .. " >&2
+		samtools view -bq 10 $bam | bamToBed \
+		| eval $TEST \
+		| modify_score - "count"\
+		| point - \
+		| filter - $FASTA > $outd/a.bed 
+		bw $outd/a.bed $OUT/chrom.size $OUT/bw/$name
+		
+	done
 	if [[ -f $TARGET && ${#COMP[@]} -gt 1 ]];then
 		for (( i=0; i < ${#COMP[@]}; i+=2 ));do
 			point1=$OUT/point/${COMP[$i]}/a.bed

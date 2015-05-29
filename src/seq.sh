@@ -1,5 +1,5 @@
 #!/bin/bash 
-. $HMHOME/src/root.sh
+. $HMHOME/src/bed.sh
 usage="
 USAGE: $0 [options] <bed> <fasta|dir> 
 	[options]:
