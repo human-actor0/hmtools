@@ -155,6 +155,10 @@ usage="$FUNCNAME <batchscript> [test]"
 	for (( i=0; i < ${#BAM[@]}; i+=2 ));do
 		name=${BAM[$i]}; bam=${BAM[$i+1]};
 		outd=$OUT/point/$name; mkdir -p $outd
+		if [ -f $outd/a.bed ];then
+			echo "$outd/a.bed exists .. pass " >&2
+			continue;
+		fi
 		if [[ $# -gt 1 &&  $2 = "test" ]];then
 			TEST="head -n 10000";
 		else
