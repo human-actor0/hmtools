@@ -23,9 +23,7 @@ check(){ ## obtained from bamtools test
 }
 
 make_tempdir(){
-	root=".";
-	if [ $# > 0 ];then root=$1; fi
-	mktemp -dp $root 
+	mktemp -d 
 }
 
 run_R(){
