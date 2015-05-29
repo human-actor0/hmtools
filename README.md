@@ -40,17 +40,16 @@ HMTools
  > docker pull oannes/hmtools:v0.2.1
 
 ```
- 1. start docker with a volume where your bam files and results will be saved
-> imagine your working dir is /workingdir at local computer
-bam files are in /workingdir/bams/control.bam  treatment.bam
-chromosome files are in /workingdir/chromosome/chr1.fa.gz chr2.fa.gz ... 
-```
- > docker run -it -v /workingdir/ oannes/hmtools:v0.2.1 /bin/bash --login
- # ls /workingdir/*  
-```
 
 ## Run
-# prepare a BATCH.txt file
+# imagine your files are :
+```
+/workingdir/bams/control.bam  treatment.bam
+/workingdir/chromosome/chr1.fa.gz chr2.fa.gz ... 
+```
+
+# prepare a BATCH.txt file in the working directory /workingdir/BATCH.txt 
+
 ```
 FASTA=/workindir/chromosome/
 BAM="
@@ -68,8 +67,16 @@ MDIST=20
 ## define output directory
 OUT=/workdir/print_result_here
 ```
-# run it now !!
+# run docker (>: you are in local, #: you are in the docker image)
 ```
- # hm batch_polya BATCH.txt
+ > docker run -it -v /workingdir/:/workingdir/ oannes/hmtools:v0.2.1 /bin/bash --login
+```
+# check /workingdir/ 
+```
+ # ls /workingdir/*; 
+```
+# run 
+```
+ # hm batch_polya /workingdir/BATCH.txt
 ```
 
