@@ -27,6 +27,23 @@ HMTools
  > cd .. 
  > hm # this will guide you to the tools  
 ```
+## Install via docker in Mac
+ 1. install docker (https://docs.docker.com/installation/mac/)
+```
+ > boot2docker init docker
+ > boot2docker start
+ > boot2docker shellinit
+ > eval "$(boot2docker shellinit)"
+```
+ 1. download hmtools image   
+```
+ > docker pull oannes/hmtools:v0.2
+
+```
+ 1. start docker with a volume where your bam files and results will be saved
+```
+ > ...
+```
 
 ## Run
 # prepare a BATCH file
@@ -34,19 +51,19 @@ HMTools
 ## BATCH.txt example
 FASTA=/mnt/db/Ucsc/hg19/chromosome/
 ## experimet name and bam files
-BAM=(
-        helaCtrAso_140128 /mnt/db/bams/polyaseq/HelapA_140128_CTRL_ASO_R1/a.bam
-        helaU1Aso_140128 /mnt/db/bams/polyaseq/HelapA_140128_U1_ASO_R1/a.bam
-)
+BAM="
+helaCtrAso_140128 /mnt/db/bams/polyaseq/HelapA_140128_CTRL_ASO_R1/a.bam
+helaU1Aso_140128 /mnt/db/bams/polyaseq/HelapA_140128_U1_ASO_R1/a.bam
+"
 TARGET=$HMHOME/data/hg19_ensGene3utr.bed.gz
 
 ## comparison plan: treatment vs control
-COMP=(
-        helaU1Aso_140128 helaCtrAso_140128
-)
+COMP="
+helaU1Aso_140128 helaCtrAso_140128
+"
 
 ## define minimum distance between peak centers
-MDIST=50
+MDIST=20
 ## define output directory
 OUT=out
 ```

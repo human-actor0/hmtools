@@ -3,25 +3,24 @@ if [[ -z $HMHOME || $HMHOME = "" ]];then
 	HMHOME=`pwd`; 
 	echo "install hmtools .. ">&2
 	cmd="
-## added by hmtools
+	## added by hmtools
 	HMHOME=$HMHOME; export HMHOME;
 	PATH=\$PATH:\$HMHOME:\$HMHOME/bin; export PATH;
-## end hmtools"
+	## end hmtools"
 	echo "$cmd" >> ~/.bash_profile
 fi
+
+
 . $HMHOME/src/polya.sh
 usage="
 hm <commands>:
 	<commands>:
 	 batch_polya : one click batch program
+	 filter .. : calculate polyA score
 "
-if [[ $# -lt 1 || ! -z $1 ]];then
+if [[ $# -lt 1 ||  -z $1 ]];then
 	echo "$usage"; 
-fi
-
-
-if [[ $1 = "batch_polya" ]];then
-	echo "$@"
+else
 	eval $1 ${@:2}
 fi
 

@@ -48,6 +48,7 @@ m=tt[,-c(1:3,ncol(tt))];
 
 ## normalize each sample by total counts
 n=ave(apply(m,1,sum), tt$sample,FUN=sum); 
+write.table(file="stdout",minn)
 m=m/n*10^6;## RPM
 
 ## use sample 0 as feature expression 
