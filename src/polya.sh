@@ -1,12 +1,12 @@
 #!/bin/bash  
 . $HMHOME/src/root.sh # import utilities 
 . $HMHOME/src/bed.sh #import utilities 
-. $HMHOME/src/stat.sh # import test_lineartrend
+. $HMHOME/src/stat.sh # import test_lineartrend test_fisherexact
 
 SEQ=$HMHOME/src/seq.sh
 FILTER=$HMHOME/src/pa_filter_nb.sh
 FILTER_M=$HMHOME/src/nb.model
-HG19FA=/mnt/db/Ucsc/hg19/
+HG19FA=/hmdata/ucsc/hg19/chromosome/
 CLUSTER=$HMHOME/src/cluster_1d_kmeans.sh
 BW=$HMHOME/bin/bedGraphToBigWig
 
@@ -113,6 +113,25 @@ _countbed(){
 	| awk -v OFS="\t" '{ print $1,$2,$3,$4,$5,$6,$11;}' \
 	| groupBy -g 1,2,3,4,6 -c 7 -o sum \
 	| awk -v OFS="\t" '{ print $1,$2,$3,$4,$6,$5;}'  
+	## zero counts
+	intersectBed -a $1 -b $2 -v -s \
+	| awk -v OFS="\t" '{ print $1,$2,$3,$4,0,$6;}'
+}
+_pre_fisherexact(){
+	#mkdir -p tmpd; tmpd="tmpd";
+	tmpd=`make_tempdir`;
+	mycat $1 > $tmpd/t; mycat $2 | cut -f1-6 > $tmpd/a; mycat $3 | cut -f1-6 > $tmpd/b	
+	## make clusters w/ the pooled
+	cat $tmpd/a $tmpd/b | sum_score - | cluster - $4 > $tmpd/c
+	## recount per cluster
+	_countbed $tmpd/c $tmpd/a > $tmpd/ca
+	_countbed $tmpd/c $tmpd/b > $tmpd/cb
+
+	intersectBed -a $tmpd/ca -b $tmpd/cb -wa -wb -f 1 -r -s \
+	| cut -f1-6,11 \
+	| intersectBed -a stdin -b $tmpd/t  -wa -wb  -s \
+	| awk -v OFS="@" '{ print $1,$2,$3,$4,0,$6"\t"$8,$9,$10,$11,$12,$13"\t"$5"\t"$7;}' 
+	rm -rf $tmpd
 }
 _precompare(){
 	#mkdir -p tmpd; tmpd="tmpd";
@@ -131,12 +150,23 @@ _precompare(){
 	rm -rf $tmpd
 }
 compare_lineartrend(){
-usage="$FUNCNAME <target> <polya_trt> <polya_ctr> <mind>";
+usage="$FUNCNAME <target> <polya_ctr> <polya_trt> <mind>";
 	if [ $# -ne 4 ]; then echo "$usage"; return; fi
 	_precompare $1 $2 $3 $4 \
 	| test_lineartrend - \
 	| tr "@" "\t" \
 	| awk -v OFS="\t" '{ if($6 == "-"){ $(NF-1) = - $(NF-1);} print $0;}'
+}
+compare_fisherexact(){
+usage="$FUNCNAME <target> <polya_ctr> <polya_trt> <mind>";
+	if [ $# -ne 4 ]; then echo "$usage"; return; fi
+	echo \
+"chr	start	end	name	score	strand	peak_start	peak_end	count1	count2	log2fc	pval	fdr"
+	_pre_fisherexact $1 $2 $3 $4 \
+	| test_fisherexact -  \
+	| tail -n+2 \
+	| awk -v OFS="\t" '{ split($1,a,"@"); print $2,a[2],a[3],$3,$4,$5,$6,$7;}' \
+	| tr "@" "\t"
 }
 
 batch_polya(){ 
@@ -192,6 +222,34 @@ usage="$FUNCNAME <batchscript> [test]"
 # test 
 ###########################################################
 test(){
+echo \
+"chr1	1	100	 n1	1	+
+chr1	200	300	 n2	1	+" > t
+
+echo \
+"chr1	1	2	 a1	1	+
+chr1	3	4	 a1	1	+
+chr1	7	8	 a1	1	+
+chr1	200	201	 a2	2	+" > a
+
+echo \
+"chr1	1	2	 a1	1	+
+chr1	4	5	 a1	1	+
+chr1	7	8	 a1	1	+
+chr1	203	204	 a2	2	+" > b
+
+#_pre_fisherexact t a b  2 
+compare_fisherexact t a b 2
+
+rm t a b
+return
+
+echo "test .. point inp"
+echo \
+"chr1	95	96	.	2	-
+chr1	99	100	.	2	+
+chr2	204	205	.	2	+" > exp
+
 echo \
 "chr1	95	100	 a1	1	+
 chr1	95	100	 a1	1	+

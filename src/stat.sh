@@ -48,6 +48,56 @@ for line in sys.stdin:
 
 }
 
+test_fisherexact(){
+GRS=2; CLS="3,4";
+cmd='
+        cols=c(CLS);
+        grp=c(GRS);
+        tt=read.table("stdin",header=F);
+        if(length(grp) == 1){ G=tt[,grp];
+        }else{
+                G=apply(tt[,grp],1,function(x){ paste(x,collapse="|");});
+        }       
+        gs=ave(1:length(G),G,FUN=length); ## group sum
+        G=G[gs>1]; tt=tt[gs>1,];
+        m=tt[,cols];
+        M=apply(m,2,function(x){ ave(x,G,FUN=sum)}) ## group sum
+        p=unlist(apply(cbind(m,M-m),1,function(x){ fisher.test(matrix(x,byrow=F,nrow=2))$p.value }))
+        fdr=p.adjust(p,method="fdr")
+        log2fc= log2((0.5+m[,2])/(m[,1]+0.5)*M[,1]/M[,2]);
+        tt$log2FC=log2fc; tt$pval=p; tt$FDR=fdr;
+        write.table(file="stdout",tt,row.names=F,col.names=T,quote=F,sep="\t");
+'
+	tmpd=`make_tempdir`
+	cmd=${cmd//GRS/$GRS};
+	cmd=${cmd//CLS/$CLS};
+	cmd=${cmd//stdout/$tmpd/out};
+	echo "$cmd" > $tmpd/cmd
+	cat $1 | R --no-save -f $tmpd/cmd &> $tmpd/log
+	cat $tmpd/out
+	rm -rf $tmpd
+}
+
+readline(){
+cmd='
+	con = file("stdin","r")
+	line =readLines(con,n=1);
+	while( length(line) > 0){ 
+		tmp=strsplit(line,"\t")[[1]];
+		g=strsplit(tmp[2],",")[[1]]
+		x=as.numeric(strsplit(tmp[3],",")[[1]])
+		y=as.numeric(strsplit(tmp[4],",")[[1]])
+		line =readLines(con,n=1);
+	}
+	close(con);
+'
+	tmpd=`make_tempdir`
+	echo "$cmd" > $tmpd/cmd
+	cat $1 | R --no-save -f $tmpd/cmd
+	cat $tmpd/out
+	rm -rf $tmpd
+}
+
 test(){
 	echo "testing test_lineartrend .. "
 	echo \
@@ -57,4 +107,8 @@ test(){
 	test_lineartrend inp > obs	
 	check exp obs	
 	rm inp exp obs
+	echo "testing test_fisherexact .. "
+	echo \
+"id1	1	10	200
+id2	1	20	100" | test_fisherexact -
 }
