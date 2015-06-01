@@ -7,3 +7,28 @@ mycat hg19_ensGene.bed.gz \
 | bed12_to_3utr - \
 | merge_by_gene - \
 | gzip -c - > hg19_ensGene3utr.bed.gz
+
+
+## protein coding genes only
+mycat /hmdata/ucsc/hg19/ensemblSource.txt.gz | awk '$2=="protein_coding"{print $1;}' | sort -k1,1 > a
+mycat /hmdata/ucsc/hg19/ensGene.txt.gz | ucsc_to_bed12  - \
+| awk -v OFS="\t" '{ split($4,a,"|");print a[1],$0;}' | sort -k1,1 \
+| join -j 1 - a | tr " " "\t" | cut -f2- \
+| perl -ne '$_=~s/ENST\d+\|//g; print $_;' \
+| gzip -c - > hg19_ensGene_coding.bed.gz 
+rm a
+
+mycat hg19_ensGene_coding.bed.gz \
+| merge_by_gene - \
+| gzip -c - \
+> hg19_ensGene_coding_merged.bed.gz
+
+mycat hg19_ensGene_coding.bed.gz \
+| bed12_to_3utr - \
+| gzip -c - > hg19_ensGene_coding3utr.bed.gz
+
+mycat hg19_ensGene_coding3utr.bed.gz \
+| merge_by_gene - \
+| gzip -c - \
+> hg19_ensGene_coding3utr_merged.bed.gz
+

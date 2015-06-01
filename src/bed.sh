@@ -40,8 +40,43 @@ sum_score(){
 		|  sortBed -i stdin | groupBy -g 1,2,3 -c 5 -o sum \
 		| awk -v OFS="\t" '{ split($1,a,","); print a[1],$2,$3,".",$4,a[2];}' \
 		| sortBed -i stdin
+
 	#done
 	#rm -rf $tmpd
+}
+
+intersectBed_sum(){
+usage="
+	$FUNCNAME <target> <read> [<intersectBed options>]
+	<intersectBed options>: -s 
+"
+	OPT="";
+	if [ $# -lt 2 ];then echo "$usage";return; fi
+	if [ $# -gt 2 ];then OPT=${@:3}; fi
+	intersectBed -a $1 -b $2 -wa -wb $OPT \
+	| awk -v OFS="\t" '{ print $1,$2,$3,$4,$5,$6,$11;}' \
+	| groupBy -g 1,2,3,4,6 -c 7 -o sum \
+	| awk -v OFS="\t" '{ print $1,$2,$3,$4,$6,$5;}'  
+	## zero counts
+	intersectBed -a $1 -b $2 -v $OPT \
+	| awk -v OFS="\t" '{ print $1,$2,$3,$4,0,$6;}'
+}
+_test_intersectBed_sum(){
+echo \
+"chr1	100	200	n1	0	+
+chr1	200	300	n2	0	-" > t
+echo \
+"chr1	100	101	r1	1	+
+chr1	199	201	r3	5	-
+chr1	200	201	r2	10	+" > a
+echo \
+"chr1	100	200	n1	1	+
+chr1	200	300	n2	5	-" > exp
+
+intersectBed_sum t a -s > obs
+echo "test .. intersectBed_sum"
+check obs exp
+rm t a obs exp
 }
 
 bed12_to_lastexon(){

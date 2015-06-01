@@ -42,19 +42,25 @@ HMTools
 ```
 
 ## Run
-# imagine your files are :
+# Imagine your files are :
 ```
-/workingdir/bams/control.bam  treatment.bam
-/workingdir/chromosome/chr1.fa.gz chr2.fa.gz ... 
+/mydir/bams/control.bam control.bam.bai treatment.bam treatment.bam.bai
+/mydir/chromosome/chr1.fa.gz chr2.fa.gz ... 
+```
+# Note
+  * do not leave a space between "=", FASTA = .. is not working 
+  * change /mydir/chromosome to  /mydir/chromosome/ 
+  * make sure bai index files are in the same directory with bam files (use samtools index program to make indices ) 
+  * make full paths ( do not use relative directory names )
+
+# prepare a BATCH.txt file in the working directory /mydir/BATCH.txt 
+
 ```
 
-# prepare a BATCH.txt file in the working directory /workingdir/BATCH.txt 
-
-```
-FASTA=/workindir/chromosome/
+FASTA=/mydir/chromosome/
 BAM="
-control /workingdir/bams/control.bam 
-treatment /workingdir/bams/treatment.bam 
+control /mydir/bams/control.bam 
+treatment /mydir/bams/treatment.bam 
 "
 TARGET=$HMHOME/data/hg19_ensGene3utr.bed.gz
 
@@ -65,18 +71,26 @@ treatment control
 ## define minimum distance between peak centers
 MDIST=20
 ## define output directory
-OUT=/workdir/print_result_here
+OUT=/mydir/results
 ```
-# run docker (>: you are in local, #: you are in the docker image)
+
+# run docker 
 ```
- > docker run -it -v /workingdir/:/workingdir/ oannes/hmtools:v0.2.1 /bin/bash --login
+ > docker run -it -v /mydir/:/mydir/ oannes/hmtools:v0.2.1 /bin/bash --login
 ```
-# check /workingdir/ 
+# check /mydir/ 
 ```
- # ls /workingdir/*; 
+ # ls /mydir/*; 
 ```
-# run 
+
+# test and delete tested results
 ```
- # hm batch_polya /workingdir/BATCH.txt
+ # hm batch_polya /mydir/BATCH.txt test
+ # rm -rf /mydir/results/ 
+```
+
+# run
+```
+ # hm batch_polya /mydir/BATCH.txt
 ```
 
