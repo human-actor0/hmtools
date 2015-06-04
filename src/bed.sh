@@ -38,15 +38,16 @@ usage="$FUNCNAME <bed6> <method>
 	}' $1;
 }
 sum_score(){
-	#tmpd=`make_tempdir`
-	#for f in `split_by_chrom $1 $tmpd`;do
-		awk -v OFS="\t" '{ $1=$1","$6;print $0;}' $1  \
-		|  sort_bed - | groupBy -g 1,2,3 -c 5 -o sum \
+	tmpd=`make_tempdir`
+	for f in `split_by_chrom $1 $tmpd`;do
+		echo " $FUNCNAME .. $f " >&2
+		awk -v OFS="\t" '{ $1=$1","$6;print $0;}' $f  \
+		| sort_bed - | groupBy -g 1,2,3 -c 5 -o sum \
 		| awk -v OFS="\t" '{ split($1,a,","); print a[1],$2,$3,".",$4,a[2];}' \
 		| sort_bed - 
 
-	#done
-	#rm -rf $tmpd
+	done
+	rm -rf $tmpd
 }
 
 intersectBed_sum(){
