@@ -1,6 +1,10 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
 
+sort_bed(){
+	cat $1 | sortBed -i stdin
+	#sort -k1,1 -k2,2n $1 
+}
 
 get_chromsize(){
 	samtools idxstats $1 | awk -v OFS="\t" '$1 != "*" && $3 > 0 { print $1,$2;}'
@@ -37,9 +41,9 @@ sum_score(){
 	#tmpd=`make_tempdir`
 	#for f in `split_by_chrom $1 $tmpd`;do
 		awk -v OFS="\t" '{ $1=$1","$6;print $0;}' $1  \
-		|  sortBed -i stdin | groupBy -g 1,2,3 -c 5 -o sum \
+		|  sort_bed - | groupBy -g 1,2,3 -c 5 -o sum \
 		| awk -v OFS="\t" '{ split($1,a,","); print a[1],$2,$3,".",$4,a[2];}' \
-		| sortBed -i stdin
+		| sort_bed - 
 
 	#done
 	#rm -rf $tmpd
@@ -53,13 +57,18 @@ usage="
 	OPT="";
 	if [ $# -lt 2 ];then echo "$usage";return; fi
 	if [ $# -gt 2 ];then OPT=${@:3}; fi
-	intersectBed -a $1 -b $2 -wa -wb $OPT \
+	tmpd=`make_tempdir`
+	mycat $1 | cut -f1-6 > $tmpd/a
+	mycat $2 | cut -f1-6 > $tmpd/b
+
+	intersectBed -a $tmpd/a -b $tmpd/b -wa -wb $OPT \
 	| awk -v OFS="\t" '{ print $1,$2,$3,$4,$5,$6,$11;}' \
 	| groupBy -g 1,2,3,4,6 -c 7 -o sum \
 	| awk -v OFS="\t" '{ print $1,$2,$3,$4,$6,$5;}'  
 	## zero counts
-	intersectBed -a $1 -b $2 -v $OPT \
+	intersectBed -a $tmpd/a -b $tmpd/b -v $OPT \
 	| awk -v OFS="\t" '{ print $1,$2,$3,$4,0,$6;}'
+	rm -rf $tmpd
 }
 _test_intersectBed_sum(){
 echo \
@@ -94,7 +103,7 @@ bed12_to_exon(){
 	    		s=$2+starts[i]; e=s+sizes[i];
 			print $1,s,e,$4,0,$6;
 		}
-	}' $1 | sortBed -i stdin | sort -u 
+	}' $1 | sort_bed - |  sort -u 
 }
 
 merge_by_gene(){
@@ -103,7 +112,7 @@ merge_by_gene(){
                 $a[0]=$a[0]."@".$a[3];  ## avoid merging different genes
                 $a[4]=0; 
                 print join("\t",@a),"\n";' \
-        | sortBed -i stdin \
+        | sort_bed - \
         | mergeBed -i stdin -s -c 4,5,6 -o distinct,count,distinct \
         | awk -v OFS="\t" '{ split($1,a,"@");$1=a[1];print $0;}'
 }

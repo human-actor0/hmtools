@@ -1,5 +1,5 @@
 #!/bin/bash 
-. $HMHOME/src/root.sh
+. $HMHOME/src/bed.sh
 usage="
 USAGE: $0 [options] <bed> <fasta|dir> 
 	[options]:
@@ -10,6 +10,7 @@ USAGE: $0 [options] <bed> <fasta|dir>
 LEFT=0;
 RIGHT=0;
 STRAND=0;
+THIS_RUN="$BASH_SOURCE $@";
 while getopts "hsl:r:" arg; do
 	case $arg in
 		l) LEFT=${OPTARG};;
@@ -59,10 +60,12 @@ cmd='
 	cmd=${cmd//STRAND/$STRAND};
 
 	tmpd=`make_tempdir`;
+	echo "$THIS_RUN " >&2
 	for f in `split_by_chrom $BED $tmpd`;do
 		chrom=${f##*/};
+		echo " .. process $chrom .." >&2
 		fa=`ls  $FA* | grep $chrom.fa`;
-		if [ -f $fa ];then
+		if [[ $fa != "" &&  -f $fa ]];then
 			fa1=$tmpd/$chrom.fa
 			mycat $fa > $fa1
 			cmd1=$cmd;
@@ -73,3 +76,4 @@ cmd='
 			echo "$fa not exist" >&2
 		fi
 	done
+	rm -rf $tmpd

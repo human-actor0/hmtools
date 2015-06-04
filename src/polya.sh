@@ -3,7 +3,7 @@
 . $HMHOME/src/bed.sh #import utilities 
 . $HMHOME/src/stat.sh # import test_lineartrend test_fisherexact
 
-SEQ=$HMHOME/src/seq.sh
+SEQ=$HMHOME/bin/bed_seq.sh
 FILTER=$HMHOME/src/pa_filter_nb.sh
 FILTER_M=$HMHOME/src/nb.model
 HG19FA=/hmdata/ucsc/hg19/chromosome/
@@ -168,6 +168,13 @@ usage="$FUNCNAME <target> <polya_ctr> <polya_trt> <mind>";
 	| awk -v OFS="\t" '{ split($1,a,"@"); print $2,a[2],a[3],$3,$4,$5,$6,$7;}' \
 	| tr "@" "\t"
 }
+
+batch_bam-to-point(){
+usage="$FUNCNAME <batchscript>"
+	if [ $# -lt 1 ];then echo "$usage"; return; fi
+	eval `cat $1 | perl -ne 'chomp;$_=~s/#.*//g; $_=~s/^\s+$//g; print $_,"\n" unless $_ eq "";'`
+}
+
 
 batch_polya(){ 
 usage="$FUNCNAME <batchscript> [test]"
