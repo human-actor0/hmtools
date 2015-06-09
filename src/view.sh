@@ -24,53 +24,6 @@
 #
 #}
 
-genetrack(){
-cmd='
-	genes=read.table("INPUT",header=F);
-	a=strsplit("GRANGE",":")[[1]];
-	chrom=a[1]; grange=as.integer(strsplit(a[2],"-")[[1]]);
-
-	gene_track.n = nrow(genes);
-	gene_track.top = gene_track.n;
-	gene_track.bot = 0;
-	gene_track.h = ((gene_track.top-gene_track.bot)/gene_track.n);
-	
-	ylim=c(gene_track.bot, gene_track.top);
-	xlim=grange;
-	png("OUTPUT",width =480, height=200);
-	plot(NULL,main="GRANGE",ylim=ylim,xlim=xlim);
-	for( i in 1:gene_track.n){
-		s=genes[i,2];
-		e=genes[i,3];
-		st=genes[i,6];
-		ybot=gene_track.top - i*gene_track.h;
-		ytop=ybot+gene_track.h/2;
-		lengths=as.integer(strsplit(as.character(genes[i,11]),",")[[1]])
-		starts=as.integer(strsplit(as.character(genes[i,12]),",")[[1]])
-		for (j in 1:genes[i,10] ){
-			start=s+starts[j];	
-			end=start+lengths[j];
-			rect(start,ybot,end,ytop);
-			if (j < genes[i,10]){
-				if ( st == "+"){
-					lines(c(end, starts[j+1] +s),c(ybot,ybot));
-				}else{
-					lines(c(end, starts[j+1] +s),c(ytop,ytop));
-				}
-			}
-		}
-	}
-	dev.off();
-'
-	tmpd=`make_tempdir`;
-	mycat $2 > $tmpd/a
-	cmd=${cmd//GRANGE/$1};
-	cmd=${cmd//INPUT/$tmpd/a};
-	cmd=${cmd//OUTPUT/$3};
-	echo "$cmd";
-	echo "$cmd" | R --no-save -q
-	rm -rf $tmpd
-}
 polya_to_track(){
 usage="
 	$FUNCNAME <bed> <ucsc_track_head>
@@ -90,11 +43,15 @@ usage="
 	rm -rf $tmpd
 }
 bedgraph_to_png(){
-	echo "$@" >&2
-	interval=$1; bed=$2; out=$3;
-	n=`cat $bed | wc -l`;
-	tmpd=`make_tempdir`
+usage="
+$FUNCNAME <bed> <interval> [<Rplot_options>]
+ <Rplot_options>: 
+	default) width=480 height=200 name=\"noname\" color=black ylab=name
+"
+if [ $# -lt 2 ];then echo "$usage"; return; fi
+	bed=$1; interval=$2; out=$3; ### other prameters 
 cmd='
+	width=480; height=200; name=\"noname\"; color=black; ylab=name;
 	color="black";
 	width=480; height=200;
 	PARAMS ## override parameters here
@@ -112,18 +69,25 @@ cmd='
 	plot(x,y,type="l",xlim=grange,main=main,col=color)
 	dev.off();
 '
-	mycat $bed | awk '$2 ~ /^[0-9]+$/' > $tmpd/a;
+	tmpd=`make_tempdir`
+	mycat $bed > $tmpd/a;
+	mycat $bed | awk '$2 ~ /^[0-9]+$/' > $tmpd/a; ## hmm this is smarter than tail -n+2
 	if [ `cat $tmpd/a | wc -l` = "0" ];then echo "$bed is empty" >&2; return; fi
-	cmd=${cmd//INTERVAL/$interval};
+
+	params=${@:4};
+	a=`echo $interval | tr ":-" "\t"`;
+	cmd=${cmd/CHROM/${a[0]}};
+	cmd=${cmd/CSTART/${a[1]}};
+	cmd=${cmd/CEND/${a[2]}};
 	cmd=${cmd/INPUT/$tmpd/a};
 	cmd=${cmd/OUTPUT/$out};
 	cmd=${cmd/PARAMS/${@:4}};
 	echo "$cmd";
-	echo "$cmd" | R --no-save -q
+#	echo "$cmd" | R --no-save -q
 	rm -rf $tmpd
 }
 
-_prep_track_to_png(){
+split_tracks(){
 cmd='use strict; 
 	my %fh=(); my $name="out";
 	my $odir="ODIR/"; 
@@ -150,92 +114,108 @@ cmd='use strict;
 
 
 
+
 track_to_png(){
-	interval=$1; tracks=$2;
-cmd='my $interval="'$interval'";
-	my ($CHROM,$START,$END);
-	my ($name, $type, $color); 
-	my @names=();
-
-	if($interval=~/(\w+):(\d+)-(\d+)/){
-		$CHROM=$1;$START=$2;$END=$3;
-	}else{
-		exit -1;	
+cmd='
+	getrgb=function(x){ 
+		x=as.integer(strsplit(as.character(x),",")[[1]]); 
+		y=x/255; 
+		return(rgb(y[1],y[2],y[3])); 
 	}
-	my %data = ();
-	while(<STDIN>){chomp;
-		if($_=~ /^track/){
-			$name="noname"; $type="bed"; $color="0,0,0";
-			if($_=~/name=(\w+)/){ $name=$1; }
-			if($_=~/color=(\d+),(\d+),(\d+)/){ 
-				$color="rgb(".($1/255).",".($2/255).",".($3/255).")";
-			}	
-			if($_=~/type=(\w+)/){ $type=$1; }
-	
-			$data{$name}{type}=$type;
-			$data{$name}{color}=$color;
-			$data{$name}{starts}=();
-			$data{$name}{ends}=();
-			push @names,$name; ## keep the order
-			next;
-		}
-		my @a=split /\t/,$_;
-		if($type eq "bedGraph"){
-			push @{$data{$name}{starts}}, $a[1];
-			push @{$data{$name}{ends}}, $a[2];
-			push @{$data{$name}{scores}}, $a[3];
-		}elsif($type eq "bed12"){
-			$data{$name}{start}=$a[1];
-			$data{$name}{end}=$a[2];
-			$data{$name}{name}=$a[3];
-			$data{$name}{strand}=$a[5];
-			$data{$name}{size}=$a[9];
-			$data{$name}{starts}=$a[10];
-			$data{$name}{ends}=$a[10];
+	draw_genetrack=function(data,chrom,cstart,cend,main){
+		gene_track.n = nrow(data);
+		gene_track.top = gene_track.n;
+		gene_track.bot = 0;
+		gene_track.h = ((gene_track.top-gene_track.bot)/gene_track.n);
+		ylim=c(gene_track.bot, gene_track.top);
+		plot(NULL,main=paste("GRANGE",name,sep=":"),ylim=ylim,xlim=c(cstart,cend));
+		for( i in 1:gene_track.n){
+			s=data[i,2]; e=data[i,3]; st=data[i,6]; color=getrgb(data[i,9]);
+			ybot=gene_track.top - i*gene_track.h; ytop=ybot+gene_track.h/2;
+			lengths=as.integer(strsplit(as.character(data[i,11]),",")[[1]])
+			starts=as.integer(strsplit(as.character(data[i,12]),",")[[1]])
+			for (j in 1:data[i,10] ){
+				start=s+starts[j];	
+				end=start+lengths[j];
+				rect(start,ybot,end,ytop,col=color);
+				if (j < data[i,10]){
+					if ( st == "+"){
+						lines(c(end, starts[j+1] +s),c(ybot,ybot),col=color);
+					}else{
+						lines(c(end, starts[j+1] +s),c(ytop,ytop),col=color);
+					}
+				}
+			}
 		}
 	}
+	draw_bedgraph=function(data,chrom,cstart,cend,color,main){
+		s=data[,2];e=data[,3]-1;c=data[,4];n=length(c);
+		x=c(s-0.1,s,e,e+0.1);
+		y=c(rep(0,n),c,c,rep(0,n));
+		ix=sort(x,index=T)$ix; x=x[ix];y=y[ix];
+		plot(x,y,type="l",xlim=c(cstart,cend),col=color,main=main)
+	}
 
-	my $width=480; my $height=300;
-	my $ntracks=scalar @names;
-	print "png(\"OUT.png\",width=",$width,",height=",$height*$ntracks,")\n";
-	print "par(mfrow=c(",$ntracks,",1))","\n";	
 
-	foreach my $name (@names){
-		my $color=$data{$name}{color};
-		if( $data{$name}{type} eq "bedGraph"){
-			print "s=c(",join( ",",@{$data{$name}{starts}}),");\n";
-			print "e=c(",join( ",",@{$data{$name}{ends}}),");\n";
-			print "e=e-1;"; 
-			print "c=c(",join( ",",@{$data{$name}{scores}}),");\n";
-			print "n=length(c); x=c(s-0.1,s,e,e+0.1); y=c(rep(0,n),c,c,rep(0,n)); ix=sort(x,index=T)\$ix; x=x[ix];y=y[ix];","\n";
-			print "plot(x,y,type=\"l\",main=\"",$name,"\",xlim=c(".$START.",".$END."),col=",$color,");\n";
+	getv=function(k,x){ ## return value from key=value pair
+		i=grep(k,x);
+		if(length(i)==1){ return(gsub(k,"",x[i])); }
+		return(NULL);
+	}
+	data=list();
+	con=file("INPUT","r");
+	line=readLines(con,n=1);
+	while(length(line) > 0){
+		tmp=strsplit(line," ")[[1]]
+		## handle track
+		if(tmp[1] == "track"){
+			name=getv("name=",tmp); 
+			data[[ name ]] = list(head=line,bed=""); 
 		}else{
+			data[[ name ]]$bed = paste(data[[ name ]]$bed,line,sep="\n");
+		}
+		line=readLines(con,n=1);
+	}
+	close(con);
+
+
+	chrom="CHROM";
+	cstart=CSTART;
+	cend=CEND;
+	png("OUT")
+	par(mfrow=c(length(data),1));
+	for( n in names(data)){
+		tmp=strsplit(data[[n]]$head," ")[[1]];
+		type=getv("type=",tmp);
+		color=getrgb(getv("color=",tmp));
+		if(type=="bed"){
+			draw_genetrack(read.table(text=data[[n]]$bed),chrom,cstart,cend,n);
+		}else if(type=="bedGraph"){
+			draw_bedgraph(read.table(text=data[[n]]$bed),chrom,cstart,cend,color,n);
 		}
 	}
-	print "dev.off();","\n";
-'
-	cat $tracks | perl -e "$cmd"
-#	mkdir -p $2;
-#	_prep_track_to_png $1 $2
-#	for f in $2/*.bedGraph;do
-#		interal=`cat $2/interval.txt`
-#		color=`head -n 1 $f | perl -ne 'if($_=~/color=(\d+),(\d+),(\d+)/){ print $1/255,",",$2/255,",",$3/255;}'`
-#		if [ -x $color ];then color="0,0,0"; fi
-#		bedgraph_to_png $interval $f ${f%.bedGraph}.png "color=rgb($color)"
-#	done
-}
+	dev.off();
 
+'
+	tmpd=`make_tempdir`
+	mycat $1 > $tmpd/a
+	cmd=${cmd/INPUT/$tmpd/a};
+	a=( `echo $2 | tr ":-" "\t"` );
+	cmd=${cmd/CHROM/${a[0]}}; cmd=${cmd/CSTART/${a[1]}}; cmd=${cmd/CEND/${a[2]}};
+	cmd=${cmd/OUT/$3};
+	echo "$cmd" | R --no-save -q
+}
 
 test(){
 
-echo \
-"chr1	1	2	p1	1	+
-chr1	2	3	p2	2	+
-chr1	5	6	p3	7	+
-chr1	7	8	p4	1	+
-chr1	5	6	n1	7	-
-chr1	7	8	n2	1	-" \
-| polya_to_track - 'track name=mypolya1 type=bedGraph description="myPolyA 1" color=0,0,255,' > obs
+#echo \
+#"chr1	1	2	p1	1	+
+#chr1	2	3	p2	2	+
+#chr1	5	6	p3	7	+
+#chr1	7	8	p4	1	+
+#chr1	5	6	n1	7	-
+#chr1	7	8	n2	1	-" \
+#| polya_to_track - 'track name=mypolya1 type=bedGraph description="myPolyA 1" color=0,0,255,' > obs
 echo \
 'track name=mypolya1_fwd type=bedGraph description="myPolyA 1" color=0,0,255,
 chr1	1	2	1
@@ -244,16 +224,19 @@ chr1	5	6	7
 chr1	7	8	1
 track name=mypolya1_bwd type=bedGraph description="myPolyA 1" color=0,0,255,
 chr1	5	6	7
-chr1	7	8	1' >  exp
-
-check exp obs
-track_to_png "chr:0-10" obs
-rm -rf exp obs
+chr1	7	8	1' >  b
+#track_to exp chr1:0-10 out
+#
+#check exp obs
+#track_to_png "chr:0-10" obs
+#rm -rf exp obs
 
 echo \
-'track name=mypolya1_fwd type=bedGraph description="myPolyA 1" color=0,0,255,
-chr1	0	100	n1	0	+	10	90	0,0,0	3	10,20,30	0,20,70' \
-| track_to_png "chr:0-100" -
+"track name=gene1 type=bed description=\"gene 1\" color=0,0,255,
+chr1	0	100	n1	0	+	10	90	0,0,0	3	10,20,30	0,20,70
+chr1	0	100	n2	0	-	10	90	0,0,255	3	10,20,30	0,20,70" > c
+
+cat b c | track_to_png - "chr1:0-100" out.png
 
 }
 
