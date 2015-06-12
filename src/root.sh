@@ -22,6 +22,10 @@ check(){ ## obtained from bamtools test
 	fi
 }
 
+rmempty(){
+	(( $(stat -c %s "$1") )) || rm "$1"
+}
+
 make_tempdir(){
 	mktemp -d 
 }

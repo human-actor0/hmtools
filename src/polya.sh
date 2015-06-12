@@ -88,7 +88,8 @@ filter(){
 cluster(){
 	MIND=$2;
 	tmpd=`make_tempdir`;
-	mergeBed -i $1 -s -c 6,2,5 -o distinct,collapse,collapse -d $MIND > $tmpd/a.bed
+	sort_bed $1 | mergeBed -i stdin -s -c 6,2,5 -o distinct,collapse,collapse -d $MIND > $tmpd/a.bed
+	head $tmpd/a.bed;
         cat $tmpd/a.bed | awk -v OFS="\t" -v M=$MIND '
         $3-$2 < M {
                 L=split($5,a,","); split($6,b,",");
@@ -124,13 +125,14 @@ _countbed(){
 _pre_fisherexact(){
 	#mkdir -p tmpd; tmpd="tmpd";
 	tmpd=`make_tempdir`;
-	mycat $1 > $tmpd/t; mycat $2 | cut -f1-6 > $tmpd/a; mycat $3 | cut -f1-6 > $tmpd/b	
+	mycat $1 | sort_bed - > $tmpd/t; 
+	mycat $2 | cut -f1-6 | sort_bed - > $tmpd/a; 
+	mycat $3 | cut -f1-6 | sort_bed - > $tmpd/b	
 	## make clusters w/ the pooled
 	cat $tmpd/a $tmpd/b | sum_score - | cluster - $4 > $tmpd/c
 	## recount per cluster
 	_countbed $tmpd/c $tmpd/a > $tmpd/ca
 	_countbed $tmpd/c $tmpd/b > $tmpd/cb
-
 	intersectBed -a $tmpd/ca -b $tmpd/cb -wa -wb -f 1 -r -s \
 	| cut -f1-6,11 \
 	| intersectBed -a stdin -b $tmpd/t  -wa -wb  -s \
@@ -140,7 +142,9 @@ _pre_fisherexact(){
 _precompare(){
 	#mkdir -p tmpd; tmpd="tmpd";
 	tmpd=`make_tempdir`;
-	mycat $1 > $tmpd/t; mycat $2 | cut -f1-6 > $tmpd/a; mycat $3 | cut -f1-6 > $tmpd/b	
+	mycat $1 | sort_bed - > $tmpd/t; 
+	mycat $2 | cut -f1-6 | sort_bed - > $tmpd/a; 
+	mycat $3 | cut -f1-6 | sort_bed - > $tmpd/b	
 	## make clusters w/ the pooled
 	cat $tmpd/a $tmpd/b | sum_score - | cluster - $4 > $tmpd/c
 	## recount per cluster
