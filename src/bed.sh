@@ -10,6 +10,14 @@ get_chromsize(){
 	samtools idxstats $1 | awk -v OFS="\t" '$1 != "*" && $3 > 0 { print $1,$2;}'
 }
 
+split_bam(){
+	mkdir -p $2;
+	for chrom in `get_chromsize $1 | cut -f1`;do
+		echo " spliting $1 to $2/$chrom.bam .. " >&2;
+		samtools view -b $1 $chrom > $2/$chrom
+	done
+	echo `ls $2/*`;
+}
 
 split_by_chrom(){
 	awk -v OFS="\t" -v O=$2 '{
@@ -38,17 +46,47 @@ usage="$FUNCNAME <bed6> <method>
 	}' $1;
 }
 sum_score(){
-	tmpd=`make_tempdir`
-	for f in `split_by_chrom $1 $tmpd`;do
-		echo " $FUNCNAME .. $f " >&2
-		awk -v OFS="\t" '{ $1=$1","$6;print $0;}' $f  \
-		| sort_bed - | groupBy -g 1,2,3 -c 5 -o sum \
-		| awk -v OFS="\t" '{ split($1,a,","); print a[1],$2,$3,".",$4,a[2];}' \
-		| sort_bed - 
+	awk -v OFS="\t" '{ $1=$1","$6;print $0;}' $1  \
+	| sort_bed - | groupBy -g 1,2,3 -c 5 -o sum \
+	| awk -v OFS="\t" '{ split($1,a,","); print a[1],$2,$3,".",$4,a[2];}'
+}
+bed_count(){
+usage="
+$FUNCNAME <target> <read>
+OUTPUT: target + sum of read scores
+use modify_score first this to change scoring method
+"
+	tmpd=`make_tempdir`;
+	mycat $1 > $tmpd/a
+	mycat $2 > $tmpd/b
+	n=`head -n 1 $tmpd/a | awk '{print NF;}'`
+	intersectBed -a $tmpd/a -b $tmpd/b -wa -wb \
+	| awk -v n=$n -v OFS="\t" '{ 
+		for(i=2; i<=n;i++){
+			$1=$1"@"$(i);
+		} print $1,$(n+5);
+	}' | groupBy -g 1 -c 2 -o sum | tr "@" "\t"
 
-	done
 	rm -rf $tmpd
 }
+_test_bed_count(){
+echo \
+'chr	1	100	n1
+chr	50	200	n2'> a
+echo \
+'chr	1	10	r1	1	+
+chr	40	50	r2	2	+
+chr	50	200	r3	3	+' > b
+
+bed_count a b  > obs
+echo \
+'chr	1	100	n1	6
+chr	50	200	n2	3' > exp
+check obs exp 
+
+rm a b exp obs
+}
+#_test_bed_count
 
 intersectBed_sum(){
 usage="
@@ -102,9 +140,74 @@ bed12_to_exon(){
 	awk -v OFS="\t" '{ split($11,sizes,",");split($12,starts,",");
 		for(i=1; i<=$10; i++){
 	    		s=$2+starts[i]; e=s+sizes[i];
-			print $1,s,e,$4,0,$6;
+			print $1,s,e,$4,$5,$6;
 		}
-	}' $1 | sort_bed - |  sort -u 
+	}' $1 
+}
+
+bed12_to_intron(){
+	##  [es   ]s----e[    ee]
+	awk -v OFS="\t" '$10 > 1{
+		## take introns
+		split($11,sizes,",");
+		split($12,starts,",");
+		for(i=1;i< $10;i++){
+			## intron
+			s = $2 + starts[i]+sizes[i];	
+			e = $2 + starts[i+1];
+			#ls = $2 + starts[i-1]; le = ls + sizes[i-1]; rs = $2 + starts[i]; re = rs + sizes[i];
+			print $1,s,e,$4,$5,$6;
+		}	
+	}' $1 
+}
+bed_flat(){
+    ## input bed features
+    ## [     ]-----------[        ]
+    ##    [      ]-----[    ]
+    ## output exon  fragments (: open [: closed intervals
+    ## [ )[  ](  ]     [)[  ](    ]  
+    #awk -v OFS="\t" '{ print $1,$2,$3,$4 "," $2 "," $3,$5,$6;}' | mergeBed -nms -s -scores collapse \
+	sort_bed $1 \
+	| mergeBed -i stdin -d -1 -c 2,3 -o distinct,distinct \
+	| perl -ne ' chomp; my @a=split /\t/,$_; 
+		my %pm=();
+		foreach my $e (split/,/,$a[4]){ $pm{$e}=1;}
+		foreach my $e (split/,/,$a[5]){ $pm{$e}=1;}
+		if(scalar keys %pm ==1){
+			print $a[0],"\t",$a[1],"\t",$a[2],"\n";
+			next;
+		}
+		my @p=sort {$a<=>$b} keys %pm; 
+		for(my $i=0; $i< $#p; $i++){
+		    my $pi = $p[$i]; my $pj = $p[$i+1];
+		    if($pj > $pi){
+			print $a[0],"\t",$pi,"\t",$pj,"\n";
+		    }
+		} 
+	' | sort -u 
+}
+
+_test_flat(){
+echo \
+'chr	11	13	.	0	+
+chr	12	14	.	0	+
+chr	1	4	.	0	+
+chr	2	3	.	0	+' | flatten_bed - >obs
+echo \
+'chr	1	2		0	+
+chr	2	3		0	+
+chr	3	4		0	+
+chr	11	12		0	+
+chr	12	13		0	+
+chr	13	14		0	+' > exp
+check exp obs
+rm exp obs
+}
+#_test_flat
+
+bed12_to_junction(){
+	bed12_to_intron $1 \
+	| awk -v OFS="\t" '{ $2=$2-1; $3=$3+1;print $0;}'
 }
 
 merge_by_gene(){

@@ -34,20 +34,24 @@ bw(){
 	pa=$1; csize=$2; out=$3;
 	tmpd=`make_tempdir`
 	#tmpd="tmpd"; mkdir -p $tmpd;
-	sortBed -i $1 | cut -f1-6 > $tmpd/a
+	sort_bed $1 | cut -f1-6 > $tmpd/a
+	tot=`cat $tmpd/a | perl -ne '@a=split/\t/,$_; $s+=$a[4]; END{ print $s/1000000;}'`
+	echo "norm_factor=$tot" > ${out}.info
 
-	awk -v OFS="\t" '{if($6=="+"){ print $1,$2,$3,$5;}}' $tmpd/a > $tmpd/p
+	awk -v OFS="\t" -v tot=$tot '{if($6=="+"){ print $1,$2,$3,$5/tot;}}' $tmpd/a > $tmpd/p
 	bedGraphToBigWig $tmpd/p $csize ${out}_fwd.bw; 
 
-	awk -v OFS="\t" '{if($6=="-"){ print $1,$2,$3,$5;}}' $tmpd/a > $tmpd/n 
+	awk -v OFS="\t" -v tot=$tot '{if($6=="-"){ print $1,$2,$3,$5/tot;}}' $tmpd/a > $tmpd/n 
 	bedGraphToBigWig $tmpd/n $csize ${out}_bwd.bw
 	rm -rf $tmpd;
 }
 
 point(){
-	awk -v OFS="\t" '{ 
-		if($6 == "+"){ $3=$2+1; $6="-"; }else{ $2=$3-1; $6="+"; } print $0; 
-	}' $1 | sum_score -
+	awk -v OFS="@" '{ 
+		if($6 == "+"){ $3=$2+1; $6="-"; }else{ $2=$3-1; $6="+"; }
+		print $1,$2,$6"\t"$5; 
+	}' $1 | sort -k1,1 | groupBy -g 1 -c 2 -o sum \
+	| tr "@" "\t" | awk -v OFS="\t" '{ print $1,$2,$2+1,".",$4,$3; }'
 }
 
 filter(){ 
@@ -247,9 +251,7 @@ chr1	203	204	 a2	2	+" > b
 
 #_pre_fisherexact t a b  2 
 compare_fisherexact t a b 2
-
 rm t a b
-return
 
 echo "test .. point inp"
 echo \

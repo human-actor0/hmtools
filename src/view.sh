@@ -224,7 +224,12 @@ chr1	5	6	7
 chr1	7	8	1
 track name=mypolya1_bwd type=bedGraph description="myPolyA 1" color=0,0,255,
 chr1	5	6	7
-chr1	7	8	1' >  b
+chr1	7	8	1
+"track name=gene1 type=bed description="gene 1" color=0,0,255,
+chr1	0	100	n1	0	+	10	90	0,0,0	3	10,20,30	0,20,70
+chr1	0	100	n2	0	-	10	90	0,0,255	3	10,20,30	0,20,70' \
+| track_to_png - "chr1:0-100" out.png
+
 #track_to exp chr1:0-10 out
 #
 #check exp obs
@@ -232,11 +237,7 @@ chr1	7	8	1' >  b
 #rm -rf exp obs
 
 echo \
-"track name=gene1 type=bed description=\"gene 1\" color=0,0,255,
-chr1	0	100	n1	0	+	10	90	0,0,0	3	10,20,30	0,20,70
-chr1	0	100	n2	0	-	10	90	0,0,255	3	10,20,30	0,20,70" > c
 
-cat b c | track_to_png - "chr1:0-100" out.png
 
 }
 
