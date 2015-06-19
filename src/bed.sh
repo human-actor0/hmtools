@@ -7,6 +7,9 @@ sort_bed(){
 }
 
 get_chromsize(){
+	if [ ! -f $1.bai ];then
+		samtools index $1;
+	fi
 	samtools idxstats $1 | awk -v OFS="\t" '$1 != "*" && $3 > 0 { print $1,$2;}'
 }
 

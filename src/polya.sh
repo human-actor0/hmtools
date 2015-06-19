@@ -233,6 +233,33 @@ usage="$FUNCNAME <batchscript> [test]"
 	
 }
 
+cryptic_vs_cannonical(){
+	gene=$1; utr=$2; ctr_point=$3; trt_point=$4;
+
+	bed_count $gene $ctr_point \
+	| awk -v OFS="@" '{ print $1,$2,$3,$4,$6"\t"$7;}' \
+	| sort -k1,1 \
+	> a
+	bed_count $gene $trt_point \
+	| awk -v OFS="@" '{ print $1,$2,$3,$4,$6"\t"$7;}' \
+	| sort -k1,1 \
+	> b
+	join a b | tr " " "\t" | awk -v OFS="\t" '{ print "NC",$0;}' > c
+	rm a b
+
+	mycat $utr | intersectBed -a $ctr_point -b stdin -v -s | bed_count $gene -  \
+	| awk -v OFS="@" '{ print $1,$2,$3,$4,$6"\t"$7;}' \
+	| sort -k1,1 \
+	> a
+	mycat $utr | intersectBed -a $trt_point -b stdin -v -s | bed_count $gene -  \
+	| awk -v OFS="@" '{ print $1,$2,$3,$4,$6"\t"$7;}' \
+	| sort -k1,1 \
+	> b
+	join a b | tr " " "\t" | awk -v OFS="\t" '{ print "CR",$0;}' >> c
+	rm a b
+	test_fisherexact c 
+}
+
 ###########################################################
 # test 
 ###########################################################

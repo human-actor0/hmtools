@@ -1,6 +1,23 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
 
+padjust(){
+usage="
+usage: $FUNCNAME <file> 
+"
+if [ $# -ne 2 ]; then echo "$usage"; return; fi
+cmd='
+	pcol=PCOL;
+	tt=read.table("stdin",header=T);
+	if( pcol < 0){
+		pcol = ncol(tt) + pcol + 1;
+	}
+	tt$fdr=p.adjust(tt$pval,method="fdr");
+        write.table(file="stdout",tt,row.names=F,col.names=T,quote=F,sep="\t");
+'
+	cmd=${cmd/PCOL/$2};
+	cat $1 | run_R "$cmd" 
+}
 test_lineartrend(){
 cmd='
 from scipy.stats.stats import pearsonr
@@ -44,39 +61,42 @@ for line in sys.stdin:
 '
 	tmpd=`make_tempdir`;	
 	echo "$cmd" > $tmpd/cmd
-	cat $1 | python $tmpd/cmd
+	cat $1 | python $tmpd/cmd \
+	| awk -v OFS="\t" 'BEGIN{print "id","x1","y1","x2","y2","r","pval";}{ print $0;}' \
+	| padjust - -1
+	rm -rf $tmpd
 
 }
 
 test_fisherexact(){
-GRS=2; CLS="3,4";
+usage="
+usage: $FUNCNAME <file>
+ <file>: columns of id, group, ctr_count, trt_count
+"
 cmd='
-        cols=c(CLS);
-        grp=c(GRS);
-        tt=read.table("stdin",header=F);
-        if(length(grp) == 1){ G=tt[,grp];
-        }else{
-                G=apply(tt[,grp],1,function(x){ paste(x,collapse="|");});
-        }       
+        tt=read.table("stdin",header=T);
+	G=tt$group;
         gs=ave(1:length(G),G,FUN=length); ## group sum
         G=G[gs>1]; tt=tt[gs>1,];
-        m=tt[,cols];
+        m=cbind(tt$ctr_count,tt$trt_count);
         M=apply(m,2,function(x){ ave(x,G,FUN=sum)}) ## group sum
         p=unlist(apply(cbind(m,M-m),1,function(x){ fisher.test(matrix(x,byrow=F,nrow=2))$p.value }))
         fdr=p.adjust(p,method="fdr")
         log2fc= log2((0.5+m[,2])/(m[,1]+0.5)*M[,1]/M[,2]);
-        tt$log2FC=log2fc; tt$pval=p; tt$FDR=fdr;
+        tt$log2fc=log2fc; tt$pval=p; tt$fdr=fdr;
         write.table(file="stdout",tt,row.names=F,col.names=T,quote=F,sep="\t");
 '
-	tmpd=`make_tempdir`
-	cmd=${cmd//GRS/$GRS};
-	cmd=${cmd//CLS/$CLS};
-	cmd=${cmd//stdout/$tmpd/out};
-	echo "$cmd" > $tmpd/cmd
-	cat $1 | R --no-save -f $tmpd/cmd &> $tmpd/log
-	cat $tmpd/out
-	rm -rf $tmpd
+	cat $1 \
+	| awk -v OFS="\t" 'BEGIN{print "id","group","ctr_count","trt_count";}{ print $0;}' \
+	| run_R "$cmd"
+	#tmpd=`make_tempdir`
+	#cmd=${cmd//stdout/$tmpd/out};
+	#echo "$cmd" > $tmpd/cmd
+	#cat $1 | R --no-save -f $tmpd/cmd &> $tmpd/log
+	#cat $tmpd/out
+	#rm -rf $tmpd
 }
+
 
 readline(){
 cmd='
@@ -102,13 +122,21 @@ test(){
 	echo "testing test_lineartrend .. "
 	echo \
 	"id1	1,2,3	10,20,30	1,2,3	300,200,100" > inp
-	echo \
-	"id1	1,2,3	10,20,30	1,2,3	300,200,100	-0.249029122546	1.62848179386e-10" > exp
 	test_lineartrend inp > obs	
+	echo \
+"id	x1	y1	x2	y2	r	pval	fdr
+id1	1,2,3	10,20,30	1,2,3	300,200,100	-0.249029122546	1.62848179386e-10	1.62848179386e-10" > exp
 	check exp obs	
 	rm inp exp obs
-	echo "testing test_fisherexact .. "
-	echo \
+
+echo "testing test_fisherexact .. "
+echo \
 "id1	1	10	200
-id2	1	20	100" | test_fisherexact -
+id2	1	20	100" | test_fisherexact - > obs
+echo \
+'id	group	ctr_count	trt_count	log2fc	pval	fdr
+id1	1	10	200	0.933212908788798	0.000524699917979567	0.000524699917979567
+id2	1	20	100	-1.02842840832652	0.000524699917979567	0.000524699917979567' > exp
+check exp obs
+
 }

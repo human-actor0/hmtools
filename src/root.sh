@@ -23,7 +23,9 @@ check(){ ## obtained from bamtools test
 }
 
 rmempty(){
-	(( $(stat -c %s "$1") )) || rm "$1"
+	for f in $@;do
+		(( $(stat -c %s "$f") )) || rm "$f"
+	done
 }
 
 make_tempdir(){
@@ -36,8 +38,9 @@ run_R(){
         tmpout=$tmpd/out;
         cmd=${cmd/stdout/$tmpout}
         echo "$cmd" > $tmpd/cmd
-        R --no-save -f $tmpd/cmd >&2;
+        R --no-save -q -f $tmpd/cmd >&2;
         cat $tmpout
+	rm -rf $tmpd
 }
 
 
