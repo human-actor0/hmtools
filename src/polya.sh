@@ -233,6 +233,34 @@ usage="$FUNCNAME <batchscript> [test]"
 	
 }
 
+pre_test_fisherexact(){
+usage="
+usage $FUNCNAME <target> <point_ctr> <point_trt> [ <mind> [ <strand> ] ]
+	mind: minimum distance between weighted centers of clusters (default 20)
+	strand: intersectBed option for target and points 
+		(-s : count points in the same strand as target)
+"
+	if [ $# -lt 3 ]; then echo "$usage"; return; fi
+	target=$1; point_ctr=$2; point_trt=$3;  mind=$4; opt_strand=$5; 
+	## options: mind=20; target_strand="-s"
+	## make id group count_ctr count_trt
+	mind=${mind:-20}; opt_strand=${opt_strand:-};
+	#tmpd="tmpd"; mkdir -p $tmpd; 
+	tmpd=`make_tempdir`;
+	mycat $1 > $tmpd/t;
+	mycat $2 | cut -f1-6 > $tmpd/a;
+	mycat $3 | cut -f1-6 > $tmpd/b;
+	## make clusters w/ the pooled
+	cat $tmpd/a $tmpd/b | sum_score - | cluster - $mind > $tmpd/c
+	## recount per cluster
+	bed_count $tmpd/c $tmpd/a 1 $opt_strand \
+	| bed_count - $tmpd/b 1 $opt_strand \
+	| intersectBed -a $tmpd/t -b stdin -wa -wb  $opt_strand \
+	| perl -ne 'chomp; my @a=split/\t/,$_; 
+		print join("@",@a[6..11]),"\t",join("@",@a[0..5]),"\t",$a[12],"\t",$a[13],"\n";' 
+	rm -rf $tmpd
+}
+
 cryptic_vs_cannonical(){
 	gene=$1; utr=$2; ctr_point=$3; trt_point=$4;
 
