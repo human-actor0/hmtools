@@ -53,23 +53,32 @@ sum_score(){
 	| sort_bed - | groupBy -g 1,2,3 -c 5 -o sum \
 	| awk -v OFS="\t" '{ split($1,a,","); print a[1],$2,$3,".",$4,a[2];}'
 }
+
 bed_count(){
 usage="
-$FUNCNAME <target> <read>
-OUTPUT: target + sum of read scores
+usage: $FUNCNAME <target> <read> [ <zero> [<strand>]]
+output: target + sum of read scores
 use modify_score first this to change scoring method
 "
+	opt_zero=${3:-0};
+	opt_strand=${4:-""};
+	if [ $# -lt 2 ];then echo "$usage"; return; fi
+
 	tmpd=`make_tempdir`;
 	mycat $1 > $tmpd/a
 	mycat $2 > $tmpd/b
 	n=`head -n 1 $tmpd/a | awk '{print NF;}'`
-	intersectBed -a $tmpd/a -b $tmpd/b -wa -wb \
+	intersectBed -a $tmpd/a -b $tmpd/b -wa -wb $opt_strand \
 	| awk -v n=$n -v OFS="\t" '{ 
 		for(i=2; i<=n;i++){
 			$1=$1"@"$(i);
 		} print $1,$(n+5);
 	}' | groupBy -g 1 -c 2 -o sum | tr "@" "\t"
 
+	if [ $opt_zero -ne 0 ]; then
+		intersectBed -a $tmpd/a -b $tmpd/b -wa -v $opt_strand \
+		| awk -v OFS="\t" '{ print $0,0;}'
+	fi
 	rm -rf $tmpd
 }
 _test_bed_count(){

@@ -1,4 +1,0 @@
-make_tracks.sh chr6:41900951-41911273 \
-gene:ensGene:$HMHOME/data/hg19_ensGene.bed.gz \
-polya:mcf10a:/media/usb_drive/pub/bams/polyaseq/fu_mcf-10a/a.bam \
-polya:mcf7:/media/usb_drive/pub/bams/polyaseq/fu_mcf-7/a.bam
