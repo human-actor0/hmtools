@@ -89,7 +89,7 @@ cluster(){
 	MIND=$2;
 	tmpd=`make_tempdir`;
 	sort_bed $1 | mergeBed -i stdin -s -c 6,2,5 -o distinct,collapse,collapse -d $MIND > $tmpd/a.bed
-	head $tmpd/a.bed;
+	#head $tmpd/a.bed;
         cat $tmpd/a.bed | awk -v OFS="\t" -v M=$MIND '
         $3-$2 < M {
                 L=split($5,a,","); split($6,b,",");
