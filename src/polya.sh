@@ -163,17 +163,17 @@ usage="$FUNCNAME <target> <polya_ctr> <polya_trt> <mind>";
 	_precompare $1 $2 $3 $4 \
 	| test_lineartrend - \
 	| tr "@" "\t" \
-	| awk -v OFS="\t" '{ if($6 == "-"){ $(NF-1) = - $(NF-1);} print $0;}'
+	| awk -v OFS="\t" '{ if($6 == "-"){ $(NF-2) = - $(NF-2);} print $0;}'
 }
 compare_fisherexact(){
 usage="$FUNCNAME <target> <polya_ctr> <polya_trt> <mind>";
 	if [ $# -ne 4 ]; then echo "$usage"; return; fi
 	echo \
-"chr	start	end	name	score	strand	peak_start	peak_end	count1	count2	log2fc	pval	fdr"
+"chr	start	end	name	score	strand	peak_start	peak_end	count1	count2	total1	total2	log2fc	pval	fdr"
 	_pre_fisherexact $1 $2 $3 $4 \
 	| test_fisherexact -  \
 	| tail -n+2 \
-	| awk -v OFS="\t" '{ split($1,a,"@"); print $2,a[2],a[3],$3,$4,$5,$6,$7;}' \
+	| awk -v OFS="\t" '{ split($1,a,"@"); print $2,a[2],a[3],$3,$4,$5,$6,$7,$8,$9;}' \
 	| tr "@" "\t"
 }
 

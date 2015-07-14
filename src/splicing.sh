@@ -1,6 +1,7 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
 . $HMHOME/src/bed.sh
+. $HMHOME/src/stat.sh
 
 make_temp(){
 	mktemp 2>/dev/null || mktemp -t $0
@@ -374,7 +375,13 @@ testI(){
 	cat $tmp
 }
 
-testEi(){
+test_exin_fisher(){
+	## input : bed6 + exclusion + inclusion counts
+	intersectBed -a $1 -b $2 -wa -wb -f 1 -r -s \
+	| awk -v OFS="@" '{ print $1,$2,$3,$4,$5,$6"\t"$7"\t"$8"\t"$15"\t"$16;}' \
+	| fisher_test -
+}
+test_exin_edger(){
 	## INPUT: comma separated control and treatment EI file ( bed6 + exclusion + inclusion)
 	## OUTPUT: bed6 + logFC + pvalue 
 	a=`echo $1 | quote`

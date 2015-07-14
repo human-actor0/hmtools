@@ -1,6 +1,8 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
-
+bed_5p(){
+ awk '{if($6=="-"){$2=$3-1;}$3=$2+1; print}'
+}
 sort_bed(){
 	cat $1 | sortBed -i stdin
 	#sort -k1,1 -k2,2n $1 
@@ -172,7 +174,7 @@ bed12_to_intron(){
 		}	
 	}' $1 
 }
-bed_flat(){
+flat_bed(){
     ## input bed features
     ## [     ]-----------[        ]
     ##    [      ]-----[    ]

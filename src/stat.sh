@@ -3,16 +3,16 @@
 
 padjust(){
 usage="
-usage: $FUNCNAME <file> 
+usage: $FUNCNAME <file> <pvalue_index>
 "
 if [ $# -ne 2 ]; then echo "$usage"; return; fi
 cmd='
 	pcol=PCOL;
-	tt=read.table("stdin",header=T);
+	tt=read.table("stdin",header=F);
 	if( pcol < 0){
 		pcol = ncol(tt) + pcol + 1;
 	}
-	tt$fdr=p.adjust(tt$pval,method="fdr");
+	tt$fdr=p.adjust(tt[,pcol],method="fdr");
         write.table(file="stdout",tt,row.names=F,col.names=T,quote=F,sep="\t");
 '
 	cmd=${cmd/PCOL/$2};
@@ -62,10 +62,10 @@ for line in sys.stdin:
 	tmpd=`make_tempdir`;	
 	echo "$cmd" > $tmpd/cmd
 	cat $1 | python $tmpd/cmd \
-	| awk -v OFS="\t" 'BEGIN{print "id","x1","y1","x2","y2","r","pval";}{ print $0;}' \
 	| padjust - -1
 	rm -rf $tmpd
 
+	#| awk -v OFS="\t" 'BEGIN{print "id","x1","y1","x2","y2","r","pval";}{ print $0;}' \
 }
 
 test_fisherexact(){
@@ -106,6 +106,40 @@ cmd='
 	#rm -rf $tmpd
 }
 
+fisher_test(){
+## input: id x  nx  y ny
+## output: id x nx y ny or pvalue
+cmd='
+	con = file("stdin","r")
+	out = file("stdout","w");
+	line =readLines(con,n=1);
+	while( length(line) > 0){ 
+		tmp=strsplit(line,"\t")[[1]];
+		x=unlist(lapply(tmp[2:length(tmp)], as.numeric));
+		r=fisher.test(matrix(x,nrow=2))
+		or=r$estimate[[1]];
+		p=r$p.value;
+		oline=sprintf("%s\t%g\t%g",line,or,p);
+		writeLines(oline,out);
+		line =readLines(con,n=1);
+	}
+	close(out);
+	close(con);
+'
+	cat $1 | run_R "$cmd"
+}
+test_fisher_test(){
+echo \
+'one	1	20	10	2
+two	20	1	20	100'\
+| fisher_test - > obs
+
+echo \
+'one	1	20	10	2	0.0134052	7.22344e-06
+two	20	1	20	100	95.7161	2.53047e-12' > exp
+	check obs exp
+	rm obs exp
+}
 
 readline(){
 cmd='
