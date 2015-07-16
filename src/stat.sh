@@ -78,7 +78,7 @@ cmd='
 	G=tt$group;
         gs=ave(1:length(G),G,FUN=length); ## group sum
 
-        #G=G[gs>1]; tt=tt[gs>1,];
+        G=G[gs>1]; tt=tt[gs>1,];
         m=cbind(tt$ctr_count,tt$trt_count);
         M=apply(m,2,function(x){ ave(x,G,FUN=sum)}) ## group sum
 
