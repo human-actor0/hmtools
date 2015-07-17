@@ -13,7 +13,7 @@ cmd='
 		pcol = ncol(tt) + pcol + 1;
 	}
 	tt$fdr=p.adjust(tt[,pcol],method="fdr");
-        write.table(file="stdout",tt,row.names=F,col.names=T,quote=F,sep="\t");
+        write.table(file="stdout",tt,row.names=F,col.names=F,quote=F,sep="\t");
 '
 	cmd=${cmd/PCOL/$2};
 	cat $1 | run_R "$cmd" 
@@ -107,8 +107,8 @@ cmd='
 }
 
 fisher_test(){
-## input: id x  nx  y ny
-## output: id x nx y ny or pvalue
+## input: id x y nx ny 
+## output: id x y nx ny or pvalue
 cmd='
 	con = file("stdin","r")
 	out = file("stdout","w");
@@ -174,9 +174,11 @@ id1	1,2,3	10,20,30	1,2,3	300,200,100	-0.249029122546	1.62848179386e-10	1.6284817
 
 echo "testing test_fisherexact .. "
 echo \
-"id1	1	10	200
+"id	group	ctr_count	trt_count
+id1	1	10	200
 id2	1	20	100
 id3	2	10	20" | test_fisherexact - > obs
+cat obs
 echo \
 'id	group	ctr_count	trt_count	ctr_total	trt_total	log2fc	pval	fdr
 id1	1	10	200	30	300	0.933212908788798	0.000524699917979567	0.000549410715429099
