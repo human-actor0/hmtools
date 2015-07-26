@@ -1,5 +1,6 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
+
 bed_5p(){
  awk '{if($6=="-"){$2=$3-1;}$3=$2+1; print}'
 }
@@ -66,7 +67,7 @@ use modify_score first this to change scoring method
 	opt_strand=${4:-""};
 	if [ $# -lt 2 ];then echo "$usage"; return; fi
 
-	tmpd=`make_tempdir`;
+	local tmpd=`make_tempdir`;
 	mycat $1 > $tmpd/a
 	mycat $2 > $tmpd/b
 	n=`head -n 1 $tmpd/a | awk '{print NF;}'`
@@ -110,7 +111,7 @@ usage="
 	OPT="";
 	if [ $# -lt 2 ];then echo "$usage";return; fi
 	if [ $# -gt 2 ];then OPT=${@:3}; fi
-	tmpd=`make_tempdir`
+	local tmpd=`make_tempdir`
 	mycat $1 | cut -f1-6 > $tmpd/a
 	mycat $2 | cut -f1-6 > $tmpd/b
 
