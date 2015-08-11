@@ -1,5 +1,6 @@
 #!/bin/bash
 
+
 mycat(){
         if [[ ${1##*.} = "gz" ]];then
                 gunzip -dc $1;
@@ -37,9 +38,9 @@ usage="
 usage: $FUNCNAME <Rscript> [<output_dir>]
 "
 	if [ $# -gt 1 ];then
-		mkdir -p $2; tmpd=$2;
+		mkdir -p $2; local tmpd=$2;
 	elif [ $# -gt 0 ]; then
-		tmpd=`make_tempdir`
+		local tmpd=`make_tempdir`
 	else
 		echo "$usage"; return;
 	fi

@@ -1,8 +1,13 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
 
-bed_5p(){
- awk '{if($6=="-"){$2=$3-1;}$3=$2+1; print}'
+
+bed3p(){
+ awk -v OFS="\t" '{ if($6=="-"){$3=$2+1;} $2=$3-1; print; }' $1
+}
+
+bed5p(){
+ awk -v OFS="\t" '{if($6=="-"){$2=$3-1;}$3=$2+1; print}' $1
 }
 sort_bed(){
 	cat $1 | sortBed -i stdin
@@ -14,6 +19,20 @@ get_chromsize(){
 		samtools index $1;
 	fi
 	samtools idxstats $1 | awk -v OFS="\t" '$1 != "*" && $3 > 0 { print $1,$2;}'
+}
+
+bychrom(){
+usage="$FUNCNAME [samtools_ops] <bam> <functions>"
+	local tmpa="";
+	local bam="";
+	for e in $@;do
+		shift; tmpa+=" $e"
+		if [ ${e##*\.} = "bam" ];then bam=$e; break; fi;
+	done
+	for chrom in `get_chromsize $bam | cut -f 1`;do
+		if [ -n "$DEBUG" ];then echo " $chrom .. ">&2; fi
+		samtools view $tmpa $chrom | $@
+	done;
 }
 
 split_bam(){
@@ -61,7 +80,7 @@ bed_count(){
 usage="
 usage: $FUNCNAME <target> <read> [ <zero> [<strand>]]
 output: target + sum of read scores
-use modify_score first this to change scoring method
+use modify_score to change scoring 
 "
 	opt_zero=${3:-0};
 	opt_strand=${4:-""};
@@ -175,7 +194,71 @@ bed12_to_intron(){
 		}	
 	}' $1 
 }
+
+bed_flat(){
+usage="$FUNCNAME [options] <bed6>
+     input bed features
+     [     ]-----------[        ]
+        [      ]-----[    ]
+     output exon  fragments (: open [: closed intervals
+     [ )[  ](  ]     [)[  ](    ]  
+"
+	mergeBed -i stdin -d -1 -c 2,3 -o distinct,distinct \
+	| perl -ne ' chomp; my @a=split /\t/,$_; 
+		my %pm=();
+		foreach my $e (split/,/,$a[3]){ $pm{$e}=1;}
+		foreach my $e (split/,/,$a[4]){ $pm{$e}=1;}
+		if(scalar keys %pm ==1){
+			print $a[0],"\t",$a[1],"\t",$a[2],"\n";
+			next;
+		}
+		my @p=sort {$a<=>$b} keys %pm; 
+		for(my $i=0; $i< $#p; $i++){
+		    my $pi = $p[$i]; my $pj = $p[$i+1];
+		    if($pj > $pi){
+			print $a[0],"\t",$pi,"\t",$pj,"\n";
+		    }
+		} 
+	' 
+}
+
+test__bed_flat(){
+echo \
+'chr	11	13	.	1	+
+chr	12	14	.	2	-
+chr	12	14	.	3	-
+chr	1	4	.	4	+
+chr	2	3	.	5	+' > inp
+
+cat inp | awk -v OFS="\t" '{ $1=$1"@"$6; $6="";$0=$0;}1'   \
+| sort -k1,1 -k2,3n \
+| bed_flat -  > obs
+echo \
+"chr@+	1	2
+chr@+	2	3
+chr@+	3	4
+chr@+	11	13
+chr@-	12	14" > exp
+check obs exp
+rm obs exp
+cat inp \
+| sort -k1,1 -k2,3n \
+| bed_flat -  > obs
+echo \
+"chr	1	2
+chr	2	3
+chr	3	4
+chr	11	12
+chr	12	13
+chr	13	14" > exp
+check obs exp
+rm obs exp inp
+}
+#test__bed_flat
+
 flat_bed(){
+usage="$FUNCNAME <bed6>";
+if [ $# -ne 1 ];then echo "$usage"; return; fi
     ## input bed features
     ## [     ]-----------[        ]
     ##    [      ]-----[    ]
@@ -186,8 +269,8 @@ flat_bed(){
 	| mergeBed -i stdin -d -1 -c 2,3 -o distinct,distinct \
 	| perl -ne ' chomp; my @a=split /\t/,$_; 
 		my %pm=();
+		foreach my $e (split/,/,$a[3]){ $pm{$e}=1;}
 		foreach my $e (split/,/,$a[4]){ $pm{$e}=1;}
-		foreach my $e (split/,/,$a[5]){ $pm{$e}=1;}
 		if(scalar keys %pm ==1){
 			print $a[0],"\t",$a[1],"\t",$a[2],"\n";
 			next;
@@ -202,28 +285,12 @@ flat_bed(){
 	' | sort -u 
 }
 
-_test_flat(){
-echo \
-'chr	11	13	.	0	+
-chr	12	14	.	0	+
-chr	1	4	.	0	+
-chr	2	3	.	0	+' | flatten_bed - >obs
-echo \
-'chr	1	2		0	+
-chr	2	3		0	+
-chr	3	4		0	+
-chr	11	12		0	+
-chr	12	13		0	+
-chr	13	14		0	+' > exp
-check exp obs
-rm exp obs
-}
-#_test_flat
 
 bed12_to_junction(){
 	bed12_to_intron $1 \
 	| awk -v OFS="\t" '{ $2=$2-1; $3=$3+1;print $0;}'
 }
+
 
 merge_by_gene(){
 ## not tested
@@ -290,6 +357,26 @@ ucsc_to_bed12(){
 get3utr(){
         #cat $1 | gtf_to_bed12.sh |bed12_to_lastexon.sh | perl -ne 'chomp;my @a=split/\t/,$_;
         cat $1 | bed12_to_lastexon.sh | mergeByGene
+}
+
+bed_igx(){
+usage=" usage: $FUNCNAME <group.bed> <feature.bed6+>
+        bed6+: bed6 + counts (tab-delimited)
+"
+if [ $# -ne 2 ];then echo "$usage"; return; fi
+        local tmpd=`make_tempdir`;
+        mycat $1 > $tmpd/a; mycat $2 > $tmpd/b
+        intersectBed -b $tmpd/a -a $tmpd/b -wa -wb -s \
+       	| perl -ne 'chomp; my @a=split/\t/,$_;
+                my $id=join("@",@a[0..5]);
+                my $j=0; for(my $i=6; $i <= $#a; $i++){
+                        if($a[$i] eq $a[0]){  $j=$i; last;}
+                }
+                my $group=join("@",@a[$j..$#a]);
+                my $xs=join("\t",@a[6..($j-1)]);
+                print $id,"\t",$group,"\t",$xs,"\n";
+        '
+        rm -rf $tmpd
 }
 
 

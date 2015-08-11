@@ -87,7 +87,7 @@ filter(){
 
 cluster(){
 	MIND=$2;
-	tmpd=`make_tempdir`;
+	local tmpd=`make_tempdir`;
 	sort_bed $1 | mergeBed -i stdin -s -c 6,2,5 -o distinct,collapse,collapse -d $MIND > $tmpd/a.bed
 	#head $tmpd/a.bed;
         cat $tmpd/a.bed | awk -v OFS="\t" -v M=$MIND '
@@ -112,6 +112,21 @@ cluster(){
 	cat $tmpd/c.bed $tmpd/b.bed
 	rm -rf $tmpd
 }
+
+cluster_many(){
+usage=" $FUNCNAME <mind> <bed> [<bed> ..]"
+if [ $# -lt 2 ];then echo "$usage"; return; fi
+        MIND=$1;
+        local tmpd=`make_tempdir`;
+        cat ${@:2} | cluster - $MIND > $tmpd/a
+        for f in ${@:2} ;do
+                bed_count $tmpd/a $f 1 -s > $tmpd/b
+                mv $tmpd/b $tmpd/a
+        done
+        cat $tmpd/a
+        rm -rf $tmpd
+}
+
 
 _countbed(){
 	intersectBed -a $1 -b $2 -wa -wb -s \

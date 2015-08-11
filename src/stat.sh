@@ -1,6 +1,111 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
 
+cor(){
+        cat $1 | R --no-save -q -e 'tt=read.table("stdin",header=F);cor(tt[,1],tt[,2],method="spearman" );' \
+        | perl -ne 'chomp;if($_=~/\[1\] ([\d|\.]+)/){print $1;}'
+}
+igx_to_igxnx(){
+usage="
+usage: $FUNCTNAME <file>
+ <file>: id, group, counts delimited by [tab]s
+"
+cat $1 | perl -e 'use strict;
+        my %d=();
+        my %dt=();
+        while(<STDIN>){ chomp;
+                my ($i,$g,@x) = split /\t/,$_;
+		if( !defined $d{$g} ){
+			@{$d{$g}}=();
+			@{$dt{$g}}=();
+		}
+                push @{$d{$g}}, [$i, $g, @x];
+		for( my $i=0; $i < scalar @x; $i++){
+			$dt{$g}[$i] += $x[$i];
+		}
+        }
+        foreach my $g (keys %d){
+	foreach my $ae (@{$d{$g}}){
+		my @b=@{$dt{$g}};
+		my @a=@$ae;
+		for(my $i=0; $i <= $#b; $i++){
+			$b[$i] -= $a[$i+2];
+		}
+		print join("\t",@a),"\t",join("\t",@b),"\n";
+        }}
+'
+}
+test__igx_to_igxnx(){
+echo \
+"1	g1	1	11
+2	g1	2	22
+3	g2	3	33" \
+| igx_to_igxnx - > obs
+echo \
+"3	g2	3	33	0	0
+1	g1	1	11	2	22
+2	g1	2	22	1	11" > exp
+check obs exp
+rm obs exp
+}
+#test__igx_to_igxnx
+
+test_edger(){
+	## INPUT: comma separated control and treatment EI file ( bed6 + x + nx )
+	## OUTPUT: bed6 + logFC + pvalue 
+	local rcmd='
+	tt=read.table("stdin",header=T);
+	cn=colnames(tt)[3:ncol(tt)];
+	group=rep(1,length(cn)); group[ grep("t.",cn)]=2;
+	event=rep(1,length(cn)); event[ grep(".x",cn)]=2;
+	
+		
+	#ix=apply(D[,7:ncol(D)], 1, min) > 0 & apply(D[,7:ncol(D)],1,max) > 10
+	library(edgeR)
+	y=DGEList(counts=tt[,3:ncol(tt)],group=factor(group));
+	y=calcNormFactors(y);
+
+	event.this=factor(event);
+	group.this=factor(group);
+	H1 <- model.matrix(~ event.this + group.this + event.this:group.this, data=y$samples )
+	H0 <- model.matrix(~ event.this + group.this )
+	print (H1)
+	coef <- (ncol(H0)+1):ncol(H1)
+	#y=estimateCommonDisp(y)
+	#y=estimateTagwiseDisp(y, trend="movingave")
+	y = estimateGLMCommonDisp(y,H1);
+	y = estimateGLMTrendedDisp(y,H1);
+	y = estimateGLMTagwiseDisp(y,H1);
+
+	fit=glmFit(y$counts, H1, y$tagwise.dispersion,offset=0,prior.count=0)
+	llh=glmLRT(fit,coef=coef)
+
+	ex.h0=apply( y$counts[,group.this == 1 & event.this == 1], 1, sum);
+	in.h0=apply( y$counts[,group.this == 1 & event.this == 2], 1, sum);
+
+	out="OUT";
+	res=data.frame(tt, logIR=log( in.h0/ ex.h0), logFC=llh$table$logFC, pval=llh$table$PValue)
+	## chrom start end logFC pval
+	write.table(res, out, col.names=T,row.names=F,sep="\t",quote=F);
+	'
+
+	local tmpd=`make_tempdir`;
+	rcmd=${rcmd/OUT/$tmpd/out}
+	echo "$rcmd" > $tmpd/a
+	cat $1 | R --no-save -f $tmpd/a >&2
+	cat $tmpd/out
+	rm -rf $tmpd
+}
+test__test_edger(){
+echo \
+"id	group	c.x	c.x	t.x	c.n	c.n	t.n
+id1	g1	1	1	20	3	30	20
+id2	g2	2	1	22	4	31	20
+id4	g2	4	1	24	6	31	20" \
+| test_edger - 
+}
+#test__test_edger
+
 padjust(){
 usage="
 usage: $FUNCNAME <file> <pvalue_index>
@@ -109,6 +214,7 @@ cmd='
 fisher_test(){
 ## input: id x y nx ny 
 ## output: id x y nx ny or pvalue
+##      or = x/(x+nx) * (y+ny)/y
 cmd='
 	con = file("stdin","r")
 	out = file("stdout","w");
