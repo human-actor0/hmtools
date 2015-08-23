@@ -1,5 +1,7 @@
 #!/bin/bash 
 #. $HMHOME/src/bed.sh
+## Author Hyunmin Kim
+## contact human.gim@gmail.com
 mycat(){
         if [[ ${1##*.} = "gz" ]];then
                 gunzip -dc $1;
