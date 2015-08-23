@@ -13,6 +13,13 @@ mycat(){
                 cat $1;
         fi
 }
+split_by_chrom(){
+	awk -v OFS="\t" -v O=$2 '{
+		fout=O"/"$1;
+		print $0 >> fout;
+	}' $1
+	echo `ls $2/*`;	## return a list of splited files
+}
 
 usage="
 USAGE: $0 [options] <bed> <fasta|dir> 
