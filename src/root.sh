@@ -35,26 +35,19 @@ make_tempdir(){
 
 run_R(){
 usage="
-usage: $FUNCNAME <Rscript> [<output_dir>]
+usage: $FUNCNAME <Rscript> 
 "
-	if [ $# -gt 1 ];then
-		mkdir -p $2; local tmpd=$2;
-	elif [ $# -gt 0 ]; then
-		local tmpd=`make_tempdir`
-	else
-		echo "$usage"; return;
-	fi
+		
         cmd=$1;
-        tmpout=$tmpd/out;
-        cmd=${cmd/stdout/$tmpout}
-        echo "$cmd" > $tmpd/cmd
-        R --no-save -q -f $tmpd/cmd &> $tmpd/log;
-	if [ -f $tmpout ];then
-        	cat $tmpout
+        cmd=${cmd/stdout/tmp.out}
+        echo "$cmd" > tmp.cmd
+        R --no-save -q -f tmp.cmd &> tmp.log;
+	if [ -f tmp.out ];then
+		cat tmp.out
+	else
+		cat tmp.log
 	fi
-	if [ $# -lt 2 ];then
-		rm -rf $tmpd
-	fi
+	rm -f tmp.cmd tmp.out tmp.log
 }
 
 

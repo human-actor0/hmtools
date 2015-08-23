@@ -3,6 +3,55 @@
 . $HMHOME/src/bed.sh
 . $HMHOME/src/stat.sh
 
+bed12_to_jc(){
+	bed12_to_intron $1 \
+	| awk -v OFS="\t" '{ $2=$2-1;$3=$3+1;} 1' \
+	| bed_sum - 
+}
+
+count_us(){ 
+usage="
+ function: count unsplicing events
+ usage: $FUNCNAME <target.bed6> <read.bed6> [options]
+  [options]: -s (count the same strand), -S (count the opposite strand)
+"
+	opt=" -wa -wb "${3:-""};
+	intersectBed -a $1 -b $2 $opt  \
+	| awk -v OFS="\t" '$8<$2 && $9>$2 || $8<$3-1 && $9>$3{
+		print $1,$2,$3,$4"|"$5,$11,$6;
+	}' | bed_sum - | tr "|" "\t" | awk -v OFS="\t" '{ print $1,$2,$3,$4,$5,$7,$6;}'
+}
+
+test__count_us(){
+fig="
+Count unsplicing for exons:
+            100         200
+	    [          ]    : exon
+       ======      ======   : unsplicing
+            ===== ======    : not unsplicing
+"
+echo \
+"chr1	100	200	e	0	+" > a
+echo \
+"chr1	50	101	r1	1	+
+chr1	150	201	r2	10	+
+chr1	100	150	r3	100	+
+chr1	150	200	r4	1000	+" > b
+echo \
+"chr1	100	200	e	0	+	11" > exp
+count_us a b > obs
+check exp obs
+rm -f a b exp obs
+}
+#test__count_us
+
+
+
+
+
+return
+
+
 count_jei(){
 usage="
 usage: $FUNCNAME <target.bed6> <read.bed12>
@@ -571,4 +620,5 @@ bed12_to_a53ss1(){
 } 
 ## test
 #echo -e "$data" | bed12_to_a53ss
+
 

@@ -1,5 +1,17 @@
 #!/bin/bash 
 #. $HMHOME/src/bed.sh
+mycat(){
+        if [[ ${1##*.} = "gz" ]];then
+                gunzip -dc $1;
+        elif [[ ${1##*.} = "bz2" ]];then
+                bunzip2 -dc $1;
+        elif [[ ${1##*.} = "zip" ]];then
+                unzip -p $1;
+        else
+                cat $1;
+        fi
+}
+
 usage="
 USAGE: $0 [options] <bed> <fasta|dir> 
 	[options]:

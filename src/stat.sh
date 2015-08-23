@@ -1,6 +1,5 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
-
 cor(){
         cat $1 | R --no-save -q -e 'tt=read.table("stdin",header=F);cor(tt[,1],tt[,2],method="spearman" );' \
         | perl -ne 'chomp;if($_=~/\[1\] ([\d|\.]+)/){print $1;}'

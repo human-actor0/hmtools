@@ -1,5 +1,6 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
+. $HMHOME/src/stat.sh
 
 
 bed3p(){
@@ -70,6 +71,29 @@ usage="$FUNCNAME <bed6> <method>
 		print $0;
 	}' $1;
 }
+bed_sum(){
+	cat $1 | perl -e 'use strict; my %res=();
+		while(<STDIN>){ chomp; my @a=split/\t/,$_;
+			$res{ join("@",(@a[0..3],$a[5])) } += $a[4]; 
+		}
+		foreach my $k (keys %res){
+			print $k,"\t",$res{$k},"\n";
+		}
+	' | tr "@" "\t" | awk -v OFS="\t" '{ print $1,$2,$3,$4,$6,$5;}'
+}
+test__bed_sum(){
+echo \
+"chr1	1	2	a	1	+
+chr1	1	2	a	2	-
+chr1	1	2	a	3	+" | bed_sum - > exp
+echo \
+"chr1	1	2	a	2	-
+chr1	1	2	a	4	+" > obs
+check exp obs
+rm obs exp
+}
+#test__bed_sum
+
 sum_score(){
 	awk -v OFS="\t" '{ $1=$1","$6;print $0;}' $1  \
 	| sort_bed - | groupBy -g 1,2,3 -c 5 -o sum \
@@ -286,10 +310,6 @@ if [ $# -ne 1 ];then echo "$usage"; return; fi
 }
 
 
-bed12_to_junction(){
-	bed12_to_intron $1 \
-	| awk -v OFS="\t" '{ $2=$2-1; $3=$3+1;print $0;}'
-}
 
 
 merge_by_gene(){

@@ -59,16 +59,37 @@ lambda() {
     unset funct
 }
 
+clean_line(){
+	perl -ne 'chomp; $_=~s/^\s+//g; $_=~ s/#.+//g; $_=~ s/\s\s+/ /g; print $_,"\n";' | awk 'NF'
+}
+each_line(){
+        fun="$@";
+        clean_line | while read -r; do
+                list $REPLY | $fun;
+        done
+}
 extend_lines(){
 usage="$FUNCNAME <lines1> <lines2>
 output: all combinations of two lines
 "
-        local cr="$2";
-        echo "$1" | each_line lambda a b : 'echo "$cr" | each_line lambda c : echo \$a \$b \$c\';
+	oIFS=$IFS; IFS=$'\n';
+	for line1 in `echo "$1" | clean_line`;do
+		for line2 in `echo "$2" | clean_line`;do
+			echo "$line1 $line2";
+		done
+	done
+	IFS=$oIFS;
+        #local cr="$2";
+        #echo "$1" | each_line lambda a b : 'echo "$cr" | each_line lambda c : echo \$a \$b \$c\';
+	#IFS=$OIFS;
 }
 test__extend_lines(){
-a=`echo -e "a b\nc d"`;
-b=`echo -e "1\n2"`
+a="
+## do not print this
+ a b c
+d e f";
+b="1 #not me
+2";
 extend_lines "$a" "$b"
-rm a b
 }
+#test__extend_lines
