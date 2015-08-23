@@ -1,5 +1,5 @@
 #!/bin/bash 
-. $HMHOME/src/bed.sh
+#. $HMHOME/src/bed.sh
 usage="
 USAGE: $0 [options] <bed> <fasta|dir> 
 	[options]:
@@ -59,7 +59,8 @@ cmd='
 	cmd=${cmd//RIGHT/$RIGHT};
 	cmd=${cmd//STRAND/$STRAND};
 
-	tmpd=`make_tempdir`;
+	mkdir -p tmpd
+	tmpd="tmpd";
 	echo "$THIS_RUN " >&2
 	for f in `split_by_chrom $BED $tmpd`;do
 		chrom=${f##*/};
