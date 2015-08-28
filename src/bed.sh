@@ -3,6 +3,33 @@
 . $HMHOME/src/stat.sh
 
 
+bede_join(){
+	echo "$@" | perl -e '
+		use strict;
+		my @files=split /\s+/,<STDIN>;
+		my $i=0;
+		my $n=scalar @files;
+		my %data=();
+		foreach my $f (@files){
+			open my $in, "<", $f;
+			while(<$in>){ chomp; my @a=split/\t/,$_;
+				my $k= join("@",@a[0..5]);
+				my $v= join("@",@a[6..$#a]);
+				if( !defined $data{$k} ){
+					my @na=( 0 )x $n;
+					$data{$k} = \@na;
+				}
+				$data{$k}->[$i]=$v;
+			}
+			close($in);
+			$i++;
+		}
+		foreach my $k (keys %data){
+			print $k,"\t",join("\t",@{$data{$k}}),"\n";
+		}
+	' | tr "@" "\t"
+}
+
 bed3p(){
  awk -v OFS="\t" '{ if($6=="-"){$3=$2+1;} $2=$3-1; print; }' $1
 }
@@ -219,18 +246,19 @@ bed12_to_intron(){
 	}' $1 
 }
 
-bed_flat(){
+bed_flat(){ 
 usage="$FUNCNAME [options] <bed6>
-     input bed features
-     [     ]-----------[        ]
-        [      ]-----[    ]
-     output exon  fragments (: open [: closed intervals
-     [ )[  ](  ]     [)[  ](    ]  
-"
+     input:
+     [     ]
+        [      ]
+     output:
+     [ ][  ][  ] 
+"; if [ $# -lt 1 ]; then echo "$usage";exit; fi
+
 	mergeBed -i stdin -d -1 -c 2,3 -o distinct,distinct \
 	| perl -ne ' chomp; my @a=split /\t/,$_; 
 		my %pm=();
-		foreach my $e (split/,/,$a[3]){ $pm{$e}=1;}
+		foreach my $s (split/,/,$a[3]){ $pm{$s}=1;}
 		foreach my $e (split/,/,$a[4]){ $pm{$e}=1;}
 		if(scalar keys %pm ==1){
 			print $a[0],"\t",$a[1],"\t",$a[2],"\n";
@@ -279,37 +307,6 @@ check obs exp
 rm obs exp inp
 }
 #test__bed_flat
-
-flat_bed(){
-usage="$FUNCNAME <bed6>";
-if [ $# -ne 1 ];then echo "$usage"; return; fi
-    ## input bed features
-    ## [     ]-----------[        ]
-    ##    [      ]-----[    ]
-    ## output exon  fragments (: open [: closed intervals
-    ## [ )[  ](  ]     [)[  ](    ]  
-    #awk -v OFS="\t" '{ print $1,$2,$3,$4 "," $2 "," $3,$5,$6;}' | mergeBed -nms -s -scores collapse \
-	sort_bed $1 \
-	| mergeBed -i stdin -d -1 -c 2,3 -o distinct,distinct \
-	| perl -ne ' chomp; my @a=split /\t/,$_; 
-		my %pm=();
-		foreach my $e (split/,/,$a[3]){ $pm{$e}=1;}
-		foreach my $e (split/,/,$a[4]){ $pm{$e}=1;}
-		if(scalar keys %pm ==1){
-			print $a[0],"\t",$a[1],"\t",$a[2],"\n";
-			next;
-		}
-		my @p=sort {$a<=>$b} keys %pm; 
-		for(my $i=0; $i< $#p; $i++){
-		    my $pi = $p[$i]; my $pj = $p[$i+1];
-		    if($pj > $pi){
-			print $a[0],"\t",$pi,"\t",$pj,"\n";
-		    }
-		} 
-	' | sort -u 
-}
-
-
 
 
 merge_by_gene(){

@@ -8,6 +8,45 @@ bed12_to_jc(){
 	| awk -v OFS="\t" '{ $2=$2-1;$3=$3+1;} 1' \
 	| bed_sum - 
 }
+bede_to_bed6(){
+## copy 5th,7th to the end to the name field, set 5th to be 0
+	cat $1 | perl -ne 'chomp; my @a=split/\t/,$_;
+	print join("\t",@a[0..3]),"@",$a[4],"@",join("@",@a[6..$#a]),"\t0\t",$a[5],"\n"; '
+}
+bed6_to_bede(){
+	cat $1 | perl -ne 'chomp; my @a=split/\t/,$_; my @b=split/@/,$a[3]; $a[3] = shift @b; $a[4] = shift @b; 
+	print join("\t",@a),"\t",join("\t",@b),"\n";	'
+}
+
+filter_intron_skip(){
+	awk '$2-1==$8 && $3+1==$9'
+}
+
+
+count_is(){
+	opt=${3:-""};
+	intersectBed -a ${1/-/stdin} -b ${2/-/stdin} -wa -wb $opt \
+	| awk -v OFS="\t" '$2==$8+1 && $3==$9-1{ print $1,$2,$3,$4"|"$5,$11,$6;}' \
+	| bed_sum - \
+	| awk -v OFS="\t" '{ split($4,a,"|");print $1,$2,$3,a[1],a[2],$6,$5;}' 
+}
+test__count_is(){
+echo "c	100	200	.	1000	+" > a
+echo "c	99	201	.	1	+
+c	99	200	.	10	+
+c	99	201	.	2	-" >b
+	count_is a b -s > obs
+	count_is a b -S >> obs
+	count_is a b >> obs
+echo "c	100	200	.	1000	+	1
+c	100	200	.	1000	+	2
+c	100	200	.	1000	+	3" > exp
+cat obs
+	check exp obs
+	rm -f obs exp a b
+
+}
+#test__count_is;
 
 count_us(){ 
 usage="
