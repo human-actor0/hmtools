@@ -2,6 +2,7 @@
 
 . $HMHOME/src/root.sh
 . $HMHOME/src/polya.sh
+. $HMHOME/src/splicing.sh
 
 #datq=( $@ );
 #for f in ${@:2};do
@@ -24,6 +25,40 @@
 #
 #}
 
+bruseq_to_track(){
+usage="$FUNCNAME <bed12> <track_name>"
+## separate by strand and splicing or unsplicing	
+	mkdir -p tmpd; rm -rf tmpd/*
+	mycat $1 | awk -v OFS="\t" '{$1=$1","$6; $4="."; $5=1;print $0;}' > tmpd/a
+	awk '$10==1' tmpd/a | cut -f1-6 > tmpd/u #unsplicing
+	bed12_to_exon tmpd/a > tmpd/s #splicing
+	bed12_to_jc tmpd/a > tmpd/j  #junctions
+	cat tmpd/s tmpd/u | sort -k1,1 -k2,3n | bed_flat - > tmpd/f # flattend
+
+	local track_name=$2;
+	cstart=`cut -f 2 tmpd/a | min`;
+	cend=`cut -f 2 tmpd/a | max`;
+	chrom=`cut -f 1 tmpd/a | tr "," "\t" | cut -f1 | head -n 1`;
+
+	## count f[+|-].bedGraph
+	cat tmpd/s tmpd/u | intersectBed -a tmpd/f -b stdin -c \
+	| tr "," "\t" | awk -v OFS="\t" '{ fout="tmpd/f"$2".bedGraph"; print $1,$3,$4,$5 >> fout;}'
+
+	## junctions 
+	cat tmpd/j | tr "," "\t" | awk -v OFS="\t" '{ fout="tmpd/j"$2".bedGraph"; print $1,$3,$4,$6 >> fout;}' 
+
+	echo "browser position $chrom:$cstart-$cend"
+	echo "track name=${track_name}_fwd type=bedGraph color=0,0,0 group=${track_name}"
+	cat tmpd/f+.bedGraph
+	echo "track name=${track_name}_bwd type=bedGraph color=0,0,0 group=${track_name}"
+	cat tmpd/f-.bedGraph | awk -v OFS="\t" '{ $4=-$4;} 1'
+
+	echo "track name=${track_name}_sp_fwd type=bedJunction color=255,0,0 group=${track_name}"
+	cat tmpd/j+.bedGraph
+	echo "track name=${track_name}_sp_bwd type=bedJunction color=255,0,0 group=${track_name}"
+	cat tmpd/j-.bedGraph | awk -v OFS="\t" '{ $4=-$4;} 1'
+	rm -rf tmpd/*
+}
 polya_to_track(){
 usage="
 	$FUNCNAME <bed> <ucsc_track_head>
@@ -131,7 +166,7 @@ cmd='
 		gene_track.bot = 0;
 		gene_track.h = ((gene_track.top-gene_track.bot)/gene_track.n);
 		ylim=c(gene_track.bot, gene_track.top);
-		plot(NULL,main=paste("GRANGE",name,sep=":"),ylim=ylim,xlim=c(cstart,cend));
+		plot(NULL,main=paste(c(chrom,cstart,cend)),ylim=ylim,xlim=c(cstart,cend));
 		for( i in 1:gene_track.n){
 			s=data[i,2]; e=data[i,3]; st=data[i,6]; color=getrgb(data[i,9]);
 			ybot=gene_track.top - i*gene_track.h; ytop=ybot+gene_track.h/2;
@@ -151,12 +186,20 @@ cmd='
 			}
 		}
 	}
+	draw_bedjunction=function(data,chrom,cstart,cend,color,main){
+		s=data[,2];e=data[,3]-1;c=data[,4];n=length(c);
+		#plot(1,xlim=c(cstart,cend),ylim=c(min(c),max(c)),col="white",main=main)
+		for(i in 1:n){
+			segments(s[i],c[i],e[i],c[i],color,lty=2,lwd=2);
+		}
+	}
 	draw_bedgraph=function(data,chrom,cstart,cend,color,main){
 		s=data[,2];e=data[,3]-1;c=data[,4];n=length(c);
 		x=c(s-0.1,s,e,e+0.1);
 		y=c(rep(0,n),c,c,rep(0,n));
 		ix=sort(x,index=T)$ix; x=x[ix];y=y[ix];
-		plot(x,y,type="l",xlim=c(cstart,cend),col=color,main=main)
+		lines(x,y,col=color);
+		#plot(x,y,type="l",xlim=c(cstart,cend),col=color,main=main)
 	}
 
 
@@ -166,6 +209,7 @@ cmd='
 		return(NULL);
 	}
 	data=list();
+	groups=list();
 	con=file("INPUT","r");
 	line=readLines(con,n=1);
 	chrom=""; cstart=-1; cend=-1;
@@ -175,6 +219,13 @@ cmd='
 		## handle track
 		if( tmp[1] == "track"){
 			name=getv("name=",tmp); 
+			group=getv("group=",tmp); 
+			if(is.null(group)){ group=name; } ## a name is a group name
+			if(is.null(groups[[ group ]] ) ){
+				groups[[ group ]] = list(tracks=c(name),maxy=NULL,miny=NULL);
+			}else{
+				groups[[ group ]]$tracks = c( groups[[ group ]]$tracks, name);
+			}
 			data[[ name ]] = list(head=line,bed=""); 
 		}else if( tmp[1] == "browser"){
 			a=strsplit(tmp[3],":")[[1]];
@@ -188,16 +239,40 @@ cmd='
 		line=readLines(con,n=1);
 	}
 	close(con);
+	
+	for( g in names(groups)){
+		x=c();y=c();
+		for( n in groups[[g]]$tracks){
+			data[[n]]$df=read.table(text=data[[n]]$bed);	
+			if(ncol(data[[n]]$df) == 4){
+				x=c(x,min(data[[n]]$df[,4]));
+				y=c(y,max(data[[n]]$df[,4]));
+			}
+		}
+		if(length(x) > 0 && length(y) >0){
+			groups[[g]]$miny=min(x);
+			groups[[g]]$maxy=max(y);
+		}
+	}	
+	print(groups);	
 	png("OUT");
-	par(mfrow=c(length(data),1));
-	for( n in names(data)){
-		tmp=strsplit(data[[n]]$head," ")[[1]];
-		type=getv("type=",tmp);
-		color=getrgb(getv("color=",tmp));
-		if(type=="bed"){
-			draw_genetrack(read.table(text=data[[n]]$bed),chrom,cstart,cend,n);
-		}else if(type=="bedGraph"){
-			draw_bedgraph(read.table(text=data[[n]]$bed),chrom,cstart,cend,color,n);
+	par(mfrow=c(length(groups),1));
+	for( g in names(groups)){
+		if(!is.null(groups[[g]]$miny) && !is.null(groups[[g]]$maxy)){
+			plot(1,main=g,xlim=c(cstart,cend),ylim=c(groups[[g]]$miny,groups[[g]]$maxy),col="white");
+			abline(h=0,lty=2,col="grey")
+		}
+		for( n in groups[[g]]$tracks){
+			tmp=strsplit(data[[n]]$head," ")[[1]];
+			type=getv("type=",tmp);
+			color=getrgb(getv("color=",tmp));
+			if(type=="bed"){
+				draw_genetrack(data[[n]]$df,chrom,cstart,cend,n);
+			}else if(type=="bedGraph"){
+				draw_bedgraph(data[[n]]$df,chrom,cstart,cend,color,n);
+			}else if(type=="bedJunction"){
+				draw_bedjunction(data[[n]]$df,chrom,cstart,cend,color,n);
+			}
 		}
 	}
 	dev.off();

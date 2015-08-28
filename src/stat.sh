@@ -1,5 +1,13 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
+
+max(){
+	awk 'NR == 1 { max=$1;} { if($1 > max) max=$1;} END { print max;}'	
+}
+min(){
+	awk 'NR == 1 { min=$1;} { if($1 < min) min=$1;} END { print min;}'	
+}
+
 cor(){
         cat $1 | R --no-save -q -e 'tt=read.table("stdin",header=F);cor(tt[,1],tt[,2],method="spearman" );' \
         | perl -ne 'chomp;if($_=~/\[1\] ([\d|\.]+)/){print $1;}'
