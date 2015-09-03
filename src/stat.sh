@@ -128,7 +128,7 @@ cmd='
         write.table(file="stdout",tt,row.names=F,col.names=F,quote=F,sep="\t");
 '
 	cmd=${cmd/PCOL/$2};
-	cat $1 | run_R "$cmd" 
+	cat $1 | run_R "$cmd"
 }
 test_lineartrend(){
 cmd='
