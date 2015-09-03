@@ -37,17 +37,17 @@ run_R(){
 usage="
 usage: $FUNCNAME <Rscript> 
 "
-		
         cmd=$1;
-        cmd=${cmd/stdout/tmp.out}
-        echo "$cmd" > tmp.cmd
-        R --no-save -q -f tmp.cmd &> tmp.log;
-	if [ -f tmp.out ];then
-		cat tmp.out
+	local tmpd=`mktemp -d`;
+        cmd=${cmd/stdout/$tmpd/out}
+        echo "$cmd" > $tmpd/cmd
+        R --no-save -q -f $tmpd/cmd &> $tmpd/log;
+	if [ -f $tmpd/out ];then
+		cat $tmpd/out
 	else
-		cat tmp.log
+		cat $tmpd/log
 	fi
-	rm -f tmp.cmd tmp.out tmp.log
+	rm -rf $tmpd;
 }
 
 

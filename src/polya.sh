@@ -10,6 +10,19 @@ HG19FA=/hmdata/ucsc/hg19/chromosome/
 CLUSTER=$HMHOME/src/cluster_1d_kmeans.sh
 BW=$HMHOME/bin/bedGraphToBigWig
 
+
+pa_precomp_fe(){
+        tmpd=`mktemp -d`
+        mycat $2 | awk -v OFS="@" '{ print $1,$2,$3,$4,$6"\t"$5;}' | sort -k1,1 > $tmpd/a
+        mycat $3 | awk -v OFS="@" '{ print $1,$2,$3,$4,$6"\t"$5;}' | sort -k1,1 > $tmpd/b
+        join -e 0 -o 0,1.2,2.2 -a 1 -a 2 $tmpd/a $tmpd/b | tr "@ " "\t" | awk -v OFS="\t" '{$4=$4"\t0";}1' > $tmpd/c
+        mycat $1 | intersectBed -a stdin -b $tmpd/c -wa -wb -s \
+        | perl -ne 'chomp;my @a=split/\t/,$_; print join(",",@a[6..11]),"\t",join(",",@a[0..5]),"\t",$a[12],"\t",$a[13],"\n";' \
+        | igx_to_igxnx - \
+        | awk -v OFS="\t" '{ print $1"@"$2,$3,$4,$5,$6;}'
+        rm -rf $tmpd
+}
+
 targetscan(){
 usage="$FUNCNAME <miR_Family_Info.txt.zip> <ucsc:targetScanS.txt>";
 if [ $# -ne 2 ];then echo "$usage"; return; fi
