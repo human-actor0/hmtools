@@ -2,6 +2,59 @@
 . $HMHOME/src/root.sh
 . $HMHOME/src/stat.sh
 
+bed_nf(){
+	head -n 1 $1 | awk '{print NF;}'
+}
+
+bed_join(){
+usage="
+usage: $FUNCNAME <bed> [<bed>..]
+function: sum and join counts per entry 
+"; if [ $# -lt 1 ];then echo "$usage">&2 ;return; fi;
+	perl -e '
+		use strict;
+		my @files=@ARGV;
+		my $i=0;
+		my $nf=scalar @files;
+		my %data=();
+		foreach my $f (@files){
+			open my $in, "<", $f;
+			while(<$in>){ chomp; my @a=split/\t/,$_;
+				my $k= join(";",(@a[0..3],$a[5]));
+				my $v= $a[4];
+				if( !defined $data{$k} ){
+					my @na=( 0 )x $nf;
+					$data{$k} = \@na;
+				}
+				$data{$k}->[$i]=$v;
+			}
+			close($in);
+			$i++;
+		}
+		sub sum{
+			my $res=0;
+			foreach my $i (@_){ $res += $i; }
+			return $res;
+		}
+		foreach my $k (keys %data){
+			my ($c, $s, $e, $n, $st) = split /;/,$k;
+			print "$c\t$s\t$e\t$n\t",sum(@{$data{$k}}),"\t$st\t", join("\t",@{$data{$k}}),"\n";
+		}
+	' $@ 
+}
+test__bed_join(){
+echo "c	1	2	n1	1	+
+c	2	3	n2	100	+" > tmpa
+echo "c	1	2	n1	10	+
+c	3	4	n3	1000	+" > tmpb
+echo \
+"c	3	4	n3	1000	+	0	1000
+c	2	3	n2	100	+	100	0
+c	1	2	n1	11	+	1	10" > exp
+bed_join tmpa tmpb  > obs
+check exp obs
+rm -f tmpa tmpb exp obs
+}
 
 bede_join(){
 	echo "$@" | perl -e '
@@ -10,31 +63,39 @@ bede_join(){
 		my $i=0;
 		my $n=scalar @files;
 		my %data=();
+		my %nc = ();
 		foreach my $f (@files){
 			open my $in, "<", $f;
 			while(<$in>){ chomp; my @a=split/\t/,$_;
 				my $k= join("@",@a[0..5]);
 				my $v= join("@",@a[6..$#a]);
-				if( !defined $data{$k} ){
-					my @na=( 0 )x $n;
-					$data{$k} = \@na;
+				$data{$k}{$i}=$v;
+				if(!defined $nc{$i}){
+					$nc{$i} = $#a - 5;
 				}
-				$data{$k}->[$i]=$v;
 			}
 			close($in);
 			$i++;
 		}
 		foreach my $k (keys %data){
-			print $k,"\t",join("\t",@{$data{$k}}),"\n";
+			print $k,"\t";
+			for(my $i=0; $i < $n; $i++){
+				if(defined $data{$k}{$i}){
+					print "\t",$data{$k}{$i};
+				}else{
+					print "\t",join("@",( 0 ) x $nc{$i});	
+				}
+			}
+			print "\n";
 		}
 	' | tr "@" "\t"
 }
 
-bed3p(){
+bed_3p(){
  awk -v OFS="\t" '{ if($6=="-"){$3=$2+1;} $2=$3-1; print; }' $1
 }
 
-bed5p(){
+bed_5p(){
  awk -v OFS="\t" '{if($6=="-"){$2=$3-1;}$3=$2+1; print}' $1
 }
 sort_bed(){
@@ -98,26 +159,45 @@ usage="$FUNCNAME <bed6> <method>
 		print $0;
 	}' $1;
 }
+bed_add(){
+	perl -e 'use strict; my %res=();
+	foreach my $f (@ARGV){
+		my $fh;
+		open($fh, $f) or die "$!";
+		while(<$fh>){chomp; my ($k,$v)=split/\t/,$_;
+			$res{$k} += $v;
+		}
+		close($fh);	
+	}
+	foreach my $k (keys %res){ print $k,"\t",$res{$k},"\n";}
+	' $@;
+}
 bed_sum(){
-	cat $1 | perl -e 'use strict; my %res=();
-		while(<STDIN>){ chomp; my @a=split/\t/,$_;
+	perl -e 'use strict; my %res=();
+	foreach my $f (@ARGV){
+		my $fh; open($fh, $f) or die "$!";
+		while(<$fh>){ chomp; my @a=split/\t/,$_;
 			$res{ join("@",(@a[0..3],$a[5])) } += $a[4]; 
 		}
-		foreach my $k (keys %res){
-			print $k,"\t",$res{$k},"\n";
-		}
-	' | tr "@" "\t" | awk -v OFS="\t" '{ print $1,$2,$3,$4,$6,$5;}'
+		close($fh);
+	}
+	foreach my $k (keys %res){ 
+		my ($c,$s,$e,$n,$st) = split /@/,$k;
+		print $c,"\t",$s,"\t",$e,"\t",$n,"\t",$res{$k},"\t",$st,"\n";
+	}
+	' $@; 
 }
 test__bed_sum(){
 echo \
 "chr1	1	2	a	1	+
 chr1	1	2	a	2	-
-chr1	1	2	a	3	+" | bed_sum - > exp
+chr1	1	2	a	3	+" | bed_sum - > obs
+
 echo \
 "chr1	1	2	a	2	-
-chr1	1	2	a	4	+" > obs
+chr1	1	2	a	4	+" > exp
 check exp obs
-rm obs exp
+rm -f obs exp
 }
 #test__bed_sum
 
@@ -397,6 +477,16 @@ if [ $# -ne 2 ];then echo "$usage"; return; fi
 }
 
 
+bed12_to_fexons(){
+## consider all exons belonging to a gene
+## bed12 input file should contain gene_id at 4th column
+        #mycat /main/hmtools/data/hg19_ensGene_coding.bed.gz \
+        bed12_to_exon $1 \
+        | awk -v OFS="\t" '{ print $1"@"$4"@"$6, $2,$3;}' \
+        | sort -k1,1 -k2,3n -u | bed_flat -\
+        | tr "@" "\t" |  awk -v OFS="\t" '{ print $1,$4,$5,$2,0,$3;}' \
+        | sort -k1,1 -k2,3n 
+}
 
 
 ###########################################################

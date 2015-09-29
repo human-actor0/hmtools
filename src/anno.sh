@@ -1,15 +1,5 @@
 #!/bin/bash
 
-fexons(){
-## consider all exons belonging to a gene
-## bed12 input file should contain gene_id at 4th column
-        #mycat /main/hmtools/data/hg19_ensGene_coding.bed.gz \
-        bed12_to_exon $1 \
-        | awk -v OFS="\t" '{ print $1"@"$4"@"$6, $2,$3;}' \
-        | sort -k1,1 -k2,3n -u | bed_flat -\
-        | tr "@" "\t" |  awk -v OFS="\t" '{ print $1,$4,$5,$2,0,$3;}' \
-        | sort -k1,1 -k2,3n 
-}
 
 genename(){
         cat $1 | perl -e 'use strict;

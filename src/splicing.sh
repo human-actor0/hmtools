@@ -3,6 +3,79 @@
 . $HMHOME/src/bed.sh
 . $HMHOME/src/stat.sh
 
+3ss(){ 
+usage=" $FUNCNAME <intron.bed6> <read.bed6> <window> [options]
+  [options]: 
+	-sm (count the reads with introns on the same strand)
+	-Sm (count the reads with introns on the opposite strand )
+	
+	               | x  | y |
+	[    ]--------------[           ]
+"
+	if [ $# -lt 2 ];then echo "$usage"; return; fi
+	local w=${3:-25};
+	local opt=" -w $w "${4:-""};
+	windowBed -a $1 -b $2 $opt  \
+	| awk -v OFS=";" -v w=$w '{
+		x=0;y=0;
+		if( $6=="+" && $9>$3-w && $9 <= $3 || $6=="-" && $8 >= $2 && $8 < $2+w){
+			x += $11;
+		}else if( $6=="+" && $8 >= $3 || $6=="-" && $9 <= $2){
+			y += $11;
+		}
+		if( x+y > 0){
+			print $1,$2,$3,$4,$5,$6"\t"x"\t"y;
+		}
+	}' | sort -k1,1 | groupBy -g 1 -c 2,3 -o sum,sum | tr ";" "\t" 
+}
+gen_bed(){
+	echo "hi" | awk -v OFS="\t" -v s=$1 -v e=$2 -v l=$3 '{
+		for(i=s; i< e; i+=1){
+			print "c",i,i+l,"p",1,"+";	
+		}	
+		for(i=s; i< e; i+=1){
+			print "c",i,i+l,"n",1,"-";	
+		}	
+	}'
+
+}
+test__3ss(){
+echo \
+"c	100	200	intron1	0	+
+c	100	200	intron1	0	-" > tmpa
+echo \
+"c	100	200	intron1	0	+	25	25
+c	100	200	intron1	0	-	25	25" > exp
+
+gen_bed 0 250 50 | 3ss tmpa - 25 -Sm > obs
+check obs exp
+rm -rf tmpa exp obs
+}
+test__3ss
+
+test__count_us(){
+fig="
+Count unsplicing for exons:
+            100         200
+	    [          ]    : exon
+       ======      ======   : unsplicing
+            ===== ======    : not unsplicing
+"
+echo \
+"chr1	100	200	e	0	+" > a
+echo \
+"chr1	50	101	r1	1	+
+chr1	150	201	r2	10	+
+chr1	100	150	r3	100	+
+chr1	150	200	r4	1000	+" > b
+echo \
+"chr1	100	200	e	0	+	11" > exp
+count_us a b > obs
+check exp obs
+rm -f a b exp obs
+}
+#test__count_us
+
 bed12_to_jc(){
 	bed12_to_intron $1 \
 	| awk -v OFS="\t" '{ $2=$2-1;$3=$3+1;} 1' \
@@ -48,41 +121,6 @@ cat obs
 }
 #test__count_is;
 
-count_us(){ 
-usage="
- function: count unsplicing events
- usage: $FUNCNAME <target.bed6> <read.bed6> [options]
-  [options]: -s (count the same strand), -S (count the opposite strand)
-"
-	opt=" -wa -wb "${3:-""};
-	intersectBed -a $1 -b $2 $opt  \
-	| awk -v OFS="\t" '$8<$2 && $9>$2 || $8<$3-1 && $9>$3{
-		print $1,$2,$3,$4"|"$5,$11,$6;
-	}' | bed_sum - | tr "|" "\t" | awk -v OFS="\t" '{ print $1,$2,$3,$4,$5,$7,$6;}'
-}
-
-test__count_us(){
-fig="
-Count unsplicing for exons:
-            100         200
-	    [          ]    : exon
-       ======      ======   : unsplicing
-            ===== ======    : not unsplicing
-"
-echo \
-"chr1	100	200	e	0	+" > a
-echo \
-"chr1	50	101	r1	1	+
-chr1	150	201	r2	10	+
-chr1	100	150	r3	100	+
-chr1	150	200	r4	1000	+" > b
-echo \
-"chr1	100	200	e	0	+	11" > exp
-count_us a b > obs
-check exp obs
-rm -f a b exp obs
-}
-#test__count_us
 
 
 

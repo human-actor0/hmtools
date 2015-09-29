@@ -1,6 +1,33 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
-
+sum(){
+	cat $1 | perl -e 'use strict; my %res=();
+	while(<STDIN>){ chomp; my @a=split/\t/,$_;
+		$res{ $a[0] } += $a[1]; 
+	}
+	foreach my $k (keys %res){
+		print $k,"\t",$res{$k},"\n";
+	}'
+}
+add(){
+	perl -e 'use strict; my %res=();
+	foreach my $f (@ARGV){
+		my $fh;
+		open($fh, $f) or die "$!";
+		while(<$fh>){chomp; my ($k,$v)=split/\t/,$_;
+			$res{$k} += $v;
+		}
+		close($fh);	
+	}
+	foreach my $k (keys %res){ print $k,"\t",$res{$k},"\n";}
+	' $@;
+}
+test__add(){
+echo "a	1" > tmpa
+echo "a	10" > tmpb
+add tmpa tmpa tmpb tmpb tmpb
+rm -f tmpa
+}
 max(){
 	awk 'NR == 1 { max=$1;} { if($1 > max) max=$1;} END { print max;}'	
 }
@@ -11,6 +38,22 @@ min(){
 cor(){
         cat $1 | R --no-save -q -e 'tt=read.table("stdin",header=F);cor(tt[,1],tt[,2],method="spearman" );' \
         | perl -ne 'chomp;if($_=~/\[1\] ([\d|\.]+)/){print $1;}'
+}
+
+pcombine_fisher(){
+usage="
+usage: $FUNCNAME <file> 
+"
+if [ $# -ne 1 ]; then echo "$usage"; return; fi
+cmd='
+	fishersMethod = function(x) pchisq(-2 * sum(log(x)),df=2*length(x),lower=FALSE)
+	tt=read.table("stdin",header=F);
+	cpval=unlist(apply(tt[,-1],1,fishersMethod));
+	tt$cpval=cpval;
+        write.table(file="stdout",tt,row.names=F,col.names=F,quote=F,sep="\t");
+'
+	cmd=${cmd/PCOL/$2};
+	cat $1 | run_R "$cmd"
 }
 igx_to_igxnx(){
 usage="

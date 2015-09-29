@@ -23,8 +23,8 @@ fi
 
 
 echo "#$B $@" >&2
-	tmpd=`makeTempDir`;
-	#tmpd='tmpd'; #mkdir -p $tmpd
+	#tmpd=`makeTempDir`;
+	tmpd='tmpd'; #mkdir -p $tmpd
 	#sort -k1,1 -k2,3n $1 \
 	bed_sum.sh "$@" \
 	| mergeBed -i stdin -s -c 6,2,5 -o distinct,collapse,collapse -d $MIND > $tmpd/a.bed
