@@ -1,0 +1,3 @@
+# array=( "${array[@]/%/_content}" )
+# array=( "${array[@]/#/prefix_}" )
+

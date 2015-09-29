@@ -59,12 +59,24 @@ bw(){
 	rm -rf $tmpd;
 }
 
+## stat.sh::sum
 point(){
-	awk -v OFS="@" '{ 
-		if($6 == "+"){ $3=$2+1; $6="-"; }else{ $2=$3-1; $6="+"; }
-		print $1,$2,$6"\t"$5; 
-	}' $1 | sort -k1,1 | groupBy -g 1 -c 2 -o sum \
-	| tr "@" "\t" | awk -v OFS="\t" '{ print $1,$2,$2+1,".",$4,$3; }'
+	awk -v OFS=";" '{ st="-";
+		if($6 == "-"){ st="+"; $2=$3-1; }
+	 	print $1,$2,st"\t"$5; 
+	}' $1 | sum - | tr ";" "\t" | awk -v OFS="\t" '{ print $1,$2,$2+1,".",$4,$3; }'
+}
+test__point(){
+echo \
+"c	1	4	a1	1	+
+c	1	3	a1	10	+
+c	1	4	a2	2	-" \
+| point - > obs	
+echo \
+"c	1	2	.	11	-
+c	3	4	.	2	+" > exp
+check obs exp
+rm -f obs exp
 }
 
 filter(){ 
@@ -99,10 +111,15 @@ filter(){
 }
 
 cluster(){
+	sort -k1,1 -k2,3n $1 \
+	| mergeBed -i stdin -s -c 5,6 -o sum,distinct -d $2 \
+	| awk -v OFS="\t" '{ print $1,$2,$3,"c",$4,$5;}' 
+}
+cluster1(){
 	MIND=$2;
 	local tmpd=`make_tempdir`;
-	sort_bed $1 | mergeBed -i stdin -s -c 6,2,5 -o distinct,collapse,collapse -d $MIND > $tmpd/a.bed
-	#head $tmpd/a.bed;
+	#local tmpd="tempd"; mkdir -p $tmpd;
+	sort -k1,1 -k2,3n $1 | mergeBed -i stdin -s -c 6,2,5 -o distinct,collapse,collapse -d $MIND > $tmpd/a.bed
         cat $tmpd/a.bed | awk -v OFS="\t" -v M=$MIND '
         $3-$2 < M {
                 L=split($5,a,","); split($6,b,",");
@@ -112,7 +129,7 @@ cluster(){
                         n += b[i];
                 }
                 print $1,$2,$3,int(s/n),int(n),$4;
-        }'  > $tmpd/b.bed
+        }' > $tmpd/b.bed
 
         cat $tmpd/a.bed | awk -v M=$MIND '$3-$2 >= M' \
          | eval $CLUSTER -d $MIND -c 5,6 - \

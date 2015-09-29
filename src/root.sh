@@ -2,7 +2,9 @@
 
 
 mycat(){
-        if [[ ${1##*.} = "gz" ]];then
+	if [[ -d $1 ]];then
+		cat ${1%/}/*;
+        elif [[ ${1##*.} = "gz" ]];then
                 gunzip -dc $1;
         elif [[ ${1##*.} = "bz2" ]];then
                 bunzip2 -dc $1;
@@ -49,6 +51,10 @@ usage: $FUNCNAME <Rscript>
 	fi
 	rm -rf $tmpd;
 }
+
+
+# array=( "${array[@]/%/_content}" )
+# array=( "${array[@]/#/prefix_}" )
 
 
 ###########################################################
