@@ -91,12 +91,21 @@ bede_join(){
 	' | tr "@" "\t"
 }
 
+bed_flank(){
+	local L=$2; local R=$3; local S=${4:-""};
+	awk -v OFS="\t" -v s=${2:-""} -v L=$L -v R=$R -v S=$S '{ 
+		if(S == "s" && $6 == "-"){
+			$2=$2-R; $3=$3+L;
+		}else{ $2=$2-L; $3=$3+R; } print $0;
+	}' $1;
+}
+
 bed_3p(){
- awk -v OFS="\t" '{ if($6=="-"){$3=$2+1;} $2=$3-1; print; }' $1
+ 	awk -v OFS="\t" '{ if($6=="-"){$3=$2+1;} $2=$3-1; print $0; }' $1
 }
 
 bed_5p(){
- awk -v OFS="\t" '{if($6=="-"){$2=$3-1;}$3=$2+1; print}' $1
+ 	awk -v OFS="\t" '{if($6=="-"){$2=$3-1;}$3=$2+1; print $0; }' $1
 }
 sort_bed(){
 	cat $1 | sortBed -i stdin
@@ -133,7 +142,7 @@ split_bam(){
 	echo `ls $2/*`;
 }
 
-split_by_chrom(){
+bed_splitByChrom(){
 	awk -v OFS="\t" -v O=$2 '{
 		fout=O"/"$1;
 		print $0 >> fout;

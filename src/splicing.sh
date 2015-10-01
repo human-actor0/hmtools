@@ -3,7 +3,68 @@
 . $HMHOME/src/bed.sh
 . $HMHOME/src/stat.sh
 
+spi(){
+usage=" $FUNCNAME <intron.bed6> <read.bed12> [ <strand> ow> ]
+  [options]: 
+	strand: -s (count the reads with introns on the same strand)
+		-S (count the reads with introns on the opposite strand )
+
+			
+		_/     sp       \_
+	[        ]--------------[           ]
+                ___     un      ___
+"
+	if [ $# -lt 2 ];then echo "$usage"; return; fi
+	local S=${3:-""}; local W=${4:-25};
+	local tmpd=`mymktempd`; #local tmpd=tmpd; mkdir -p $tmpd
+	mycat $1 | awk -v OFS="\t" '{ $4=$1";"$2";"$3";"$4";0;"$6; print $0; }' > $tmpd/a
+	mycat $2 > $tmpd/b
+	bed12_to_intron $tmpd/b | awk -v OFS="\t" '{ $4="S";} 1' | bed_sum - > $tmpd/s
+	bed12_to_exon $tmpd/b | awk -v OFS="\t" '{ $4="U";} 1' | bed_sum - > $tmpd/u
+	## sp
+	intersectBed -a $tmpd/a -b $tmpd/s -wa -wb -f 1 -r $S \
+	| cut -f4,11 | sum - | sort -k1,1 > $tmpd/s.r
+
+	## un
+	intersectBed -a $tmpd/a -b $tmpd/u -wa -wb $S \
+	| awk '$8 < $2 || $9 > $3' \
+	| cut -f4,11 | sum - | sort -k1,1 > $tmpd/u.r
+	
+	## sp un
+	join -a 1 -a 2 -e 0 -o 0,1.2,2.2 $tmpd/s.r $tmpd/u.r | tr " " "\t"
+
+	rm -rf $tmpd;
+}
+join2(){
+ 	join -a 1 -a 2 -o 0,1.2,1.3,2.2,2.3 -e 0 -j 1 $1 $2 | tr " " "\t"
+}
 3ss(){ 
+usage=" $FUNCNAME <intron.bed6> <read.bed6> [ <strand> <window> ]
+  [options]: 
+	strand: -s (count the reads with introns on the same strand)
+		-S (count the reads with introns on the opposite strand )
+	window: <int>
+	
+	               | un | sp |
+	[    ]--------------[           ]
+"
+	if [ $# -lt 2 ];then echo "$usage"; return; fi
+	local S=${3:-""}; local W=${4:-25};
+	tmpd=`mymktempd`;
+	#tmpd=tmpd; mkdir -p $tmpd; 
+	mycat $1 | awk '{ $4=$1";"$2";"$3";"$4";0;"$6; print $0; }' | bed_3p - > $tmpd/a
+	bed_flank $tmpd/a $W 0 s > $tmpd/u 
+	bed_flank $tmpd/a -1 $(( $W+1 )) s > $tmpd/s 
+
+	mycat $2 > $tmpd/b
+	for e in s u; do
+		intersectBed -a $tmpd/$e -b $tmpd/b -wa -wb $S \
+		| cut -f4,11 | sum - | sort -k1,1 > $tmpd/$e.r
+	done
+	join -a 1 -a 2 -e 0 -o 0,1.2,2.2 $tmpd/s.r $tmpd/u.r | tr " " "\t"
+	rm -rf $tmpd
+}
+3ss_v2(){ 
 usage=" $FUNCNAME <intron.bed6> <read.bed6> <window> [options]
   [options]: 
 	-sm (count the reads with introns on the same strand)
@@ -51,7 +112,7 @@ gen_bed 0 250 50 | 3ss tmpa - 25 -Sm > obs
 check obs exp
 rm -rf tmpa exp obs
 }
-test__3ss
+#test__3ss
 
 test__count_us(){
 fig="

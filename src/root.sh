@@ -31,8 +31,8 @@ rmempty(){
 	done
 }
 
-make_tempdir(){
-	mktemp -d 
+mymktempd(){
+	mktemp -d 2>/dev/null || mktemp -d -t 'hmtmpdir'
 }
 
 run_R(){
