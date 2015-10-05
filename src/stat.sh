@@ -209,12 +209,13 @@ for line in sys.stdin:
 	a = line.rstrip().split("\t");
 	x1,y1,x2,y2 = map(s2a, a[1:]);
 	try:
-		r,p = test_lineartrend(x1,y1,x2,y2)
+		#r,p = test_lineartrend(x1,y1,x2,y2)
+		r,p = test_lineartrend(x2,y2,x1,y1)
 		print "\t".join(map(str, a + [r,p]))
 	except ValueError:
 		1
 '
-	tmpd=`make_tempdir`;	
+	tmpd=`mymktempd`;	
 	echo "$cmd" > $tmpd/cmd
 	cat $1 | python $tmpd/cmd \
 	| padjust - -1
