@@ -1,4 +1,4 @@
-#!/bin/bash  
+#/bin/bash  
 . $HMHOME/src/root.sh # import utilities 
 . $HMHOME/src/bed.sh #import utilities 
 . $HMHOME/src/stat.sh # import test_lineartrend test_fisherexact
@@ -10,6 +10,170 @@ HG19FA=/hmdata/ucsc/hg19/chromosome/
 CLUSTER=$HMHOME/src/cluster_1d_kmeans.sh
 BW=$HMHOME/bin/bedGraphToBigWig
 
+pa_test_pcpa_vs_pa(){
+usage="
+$FUNCNAME <gene.bed> <3utr.bed> <trt.bed> <ctr.bed> [option]
+"
+	local tmpd=`mymktempd`;
+	local opts=${5:-""};
+	intersectBed -a $1 -b $3 -wa -wb $opts \
+	| awk -v OFS=";" '{ print $1,$2,$3,$4,$5,$6"\t"$11;}' \
+	| sum - > $tmpd/trt 
+
+	intersectBed -a $1 -b $4 -wa -wb $opts \
+	| awk -v OFS=";" '{ print $1,$2,$3,$4,$5,$6"\t"$11;}' \
+	| sum - > $tmpd/ctr 
+
+
+}
+
+pa_de(){
+usage="
+function: determine Positive,Negative, Unchange, Ignore
+usage: $FUNCNAME <fisherTestOut> <fdr> [type]
+ [type]: default oddratio, FDR at last -2 and last columns
+"
+	local FDR=$2;
+	local tmpd=`mymktempd`;
+	cat $1 > $tmpd/a
+	local Type=${3:-"fisher"};
+	if [ $Type = "3utr" ];then
+		cat $tmpd/a | awk -v OFS="\t" -v FDR=$FDR -v MINS=$mins '{
+			s=$8+$9+$10+$11; fdr=$(NF); OR=$(NF-2);
+			d="I";#low sample
+			if( fdr <= FDR){ if(OR > 1){ d="P"; }else{ d="N"; } }
+			else if( s >= MINS){ d="U";}
+			print $7,d;
+		}' | perl -e 'use strict;
+			my %res=();
+			while(<STDIN>){chomp; my ($id,$e) = split /\t/,$_;
+				$res{$id}{$e} = 1;
+			}
+			foreach my $k (keys %res){
+				if(defined $res{$k}{P} || defined $res{$k}{N}){
+					print $k,"\t","A","\n";
+				}elsif(defined $res{$k}{U}){
+					print $k,"\t","U","\n";
+				}else{
+					print $k,"\t","I","\n";
+				}
+			}
+		' | tr "," "\t"
+	else
+		cat $tmpd/a | awk -v OFS="\t" -v FDR=$FDR -v MINS=$mins '{
+			s=$8+$9+$10+$11; fdr=$(NF); OR=$(NF-2);
+			d="I";#low sample
+			if( fdr <= FDR){ if(OR > 1){ d="P"; }else{ d="N"; } }
+			else if( s >= MINS){ d="U";}
+			print $1,$2,$3,$4,$5,$6,d;
+		}'
+	fi
+	rm -rf $tmpd
+}
+
+pa_de2(){
+	local tmpd=`mymktempd`;
+	pa_de $1 $3 ${4:-"fisher"} | awk -v OFS=";" '{print $1,$2,$3,$4,$5,$6"\t"$7;}' | sort -k 1,1 > $tmpd/a
+	pa_de $2 $3 ${4:-"fisher"} | awk -v OFS=";" '{print $1,$2,$3,$4,$5,$6"\t"$7;}' | sort -k 1,1 > $tmpd/b
+	join -a 1 -a 2 -e "I" -o 0,1.2,2.2 $tmpd/a $tmpd/b | tr " ;" "\t" 
+	rm -rf $tmpd
+}
+
+pa_test_relativefreq(){
+usage="
+	$FUNCNAME <target> <trt.bed> <ctr.bed> [-s|-S] 
+"
+if [ $# -lt 3 ];then echo "$usage"; return; fi
+	local opts=${4:-""};
+	bed_join $2 $3 \
+	| intersectBed -a $1 -b stdin -wa -wb $opts \
+	| perl -ne 'chomp; my @a=split /\t/,$_; 
+		$a[10]=0; ## this allows cross comparisons
+		print join(";",@a[6..11]),"\t",
+			join(",",@a[0..5]),"\t",
+			join("\t",@a[12..$#a]),"\n";' \
+	| igx_to_igxnx - \
+	| awk -v OFS="\t" '{ print $1"@"$2,$3,$4,$5,$6;}' \
+	| fisher_test - | padjust - -1 \
+	| tr "@" "\t" | tr ";" "\t" 
+}
+
+pa_test_pcpa_to_pa(){
+usage="
+function: test the ratio of PCPA to PA 
+usage: $FUNCNAME <gene.bed> <3utr.bed> <trt.bed> <ctr.bed> [options]
+ <3utr.bed> : filter for PCPA
+ [options] : [-s|-S]
+"
+	local tmpd=`mymktempd`;
+	local opts=${5:-""};
+	#local tmpd=tmpd;mkdir -p $tmpd;	
+	intersectBed -a $1 -b $3 -wa -wb $opts \
+	| awk -v OFS=";" '{ print $1,$2,$3,$4,$5,$6"\t"$11;}'  | sum - \
+	| sort -k1,1 > $tmpd/trt
+	
+	intersectBed -a $3 -b $2 -v $opts \
+	| intersectBed -a $1 -b stdin -wa -wb $opts \
+	| awk -v OFS=";" '{ print $1,$2,$3,$4,$5,$6"\t"$11;}'  | sum - \
+	| sort -k1,1 > $tmpd/trt-3utr
+		
+
+	intersectBed -a $1 -b $4 -wa -wb $opts \
+	| awk -v OFS=";" '{ print $1,$2,$3,$4,$5,$6"\t"$11;}'  | sum - \
+	| sort -k1,1 > $tmpd/ctr
+
+	intersectBed -a $4 -b $2 -v $opts\
+	| intersectBed -a $1 -b stdin -wa -wb $opts \
+	| awk -v OFS=";" '{ print $1,$2,$3,$4,$5,$6"\t"$11;}'  | sum - \
+	| sort -k1,1 > $tmpd/ctr-3utr
+
+	join -a 1 -a 2 -e 0 -o 0,1.2,2.2 $tmpd/trt-3utr $tmpd/trt \
+	| join -a 1 -a 2 -e 0 -o 0,1.2,1.3,2.2 - $tmpd/ctr-3utr \
+	| join -a 1 -a 2 -e 0 -o 0,1.2,1.3,1.4,2.2 - $tmpd/ctr 	\
+	| awk -v OFS="\t" '{ $3=$3-$2; $5=$5-$4;} 1' \
+	| fisher_test - | padjust - -1
+	rm -rf $tmpd;	
+}
+
+pa_test_diff_fisher(){
+        bed_join $1 $2 \
+        | awk -v OFS=";" '{ print $1,$2,$3,$4,$5,$6"\t"1"\t"$7"\t"$8;}' \
+        | igx_to_igxnx - \
+        | cut -f1,3-6 \
+        | fisher_test2 - \
+        | padjust - -1
+}
+
+
+pa_test_lineartrend(){
+usage="$FUNCNAME <target> <trt.bed> <ctr.bed> [-S|-s]
+"
+if [ $# -lt 3 ];then echo "$usage"; return; fi
+	local tmpd=`mymktempd`; #local tmpd=tmpd; mkdir -p $tmpd
+	local opts=${4:-""};
+
+	mycat $1 > $tmpd/t
+
+	intersectBed -a $tmpd/t -b $2 -wa -wb $opts \
+	| awk -v OFS=";" '{ print $1,$2,$3,$4,$5,$6"\t"$8"\t"$11;}' \
+	| sort -k1,1 | groupBy -g 1 -c 2,3 -o collapse,collapse > $tmpd/ta
+
+	intersectBed -a $tmpd/t -b $3 -wa -wb $opts \
+	| awk -v OFS=";" '{ print $1,$2,$3,$4,$5,$6"\t"$8"\t"$11;}' \
+	| sort -k1,1 | groupBy -g 1 -c 2,3 -o collapse,collapse > $tmpd/tb
+
+	join -a 1 -a 2 -j 1 -e NA -o 0,1.2,1.3,2.2,2.3 $tmpd/ta $tmpd/tb | tr " " "\t" 
+	rm -rf $tmpd;
+}
+
+
+f(){
+
+	grep -v NA $tmpd/tab | test_lineartrend - \
+        | awk -v OFS="\t" '{ if( substr($1,length($1),1) == "-"){ $(NF-2) = - $(NF-2);} print $0;}'
+
+	rm -rf $tmpd
+}
 
 pa_precomp_fe(){
         tmpd=`mktemp -d`
@@ -60,7 +224,7 @@ bw(){
 }
 
 ## stat.sh::sum
-point(){
+pa_point(){
 	awk -v OFS=";" '{ st="-";
 		if($6 == "-"){ st="+"; $2=$3-1; }
 	 	print $1,$2,st"\t"$5; 
@@ -71,7 +235,7 @@ echo \
 "c	1	4	a1	1	+
 c	1	3	a1	10	+
 c	1	4	a2	2	-" \
-| point - > obs	
+| pa_point - > obs	
 echo \
 "c	1	2	.	11	-
 c	3	4	.	2	+" > exp
@@ -110,10 +274,10 @@ filter(){
 	'
 }
 
-cluster(){
+pa_cluster_sb(){ # snowballing
 	sort -k1,1 -k2,3n $1 \
 	| mergeBed -i stdin -s -c 5,6 -o sum,distinct -d $2 \
-	| awk -v OFS="\t" '{ print $1,$2,$3,"c",$4,$5;}' 
+	| awk -v OFS="\t" -v D=$2 '{ print $1,$2,$3,"SB"D,$4,$5;}' 
 }
 cluster1(){
 	MIND=$2;
