@@ -40,7 +40,7 @@ usage="
 usage: $FUNCNAME <Rscript> 
 "
         cmd=$1;
-	local tmpd=`mktemp -d`;
+	local tmpd=`mymktempd`;
         cmd=${cmd/stdout/$tmpd/out}
         echo "$cmd" > $tmpd/cmd
         R --no-save -q -f $tmpd/cmd &> $tmpd/log;
@@ -51,7 +51,9 @@ usage: $FUNCNAME <Rscript>
 	fi
 	rm -rf $tmpd;
 }
-
+quote(){
+	perl -ne 'chomp; print join(",", map{ "\"$_\"" } split( /\s+/,$_ )),"\n"';
+}
 
 # array=( "${array[@]/%/_content}" )
 # array=( "${array[@]/#/prefix_}" )

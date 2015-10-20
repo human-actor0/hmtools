@@ -285,6 +285,23 @@ cmd='
 '
 	cat $1 | run_R "$cmd"
 }
+fisher_test2(){
+	local tmpd=`mymktempd`;
+#	local tmpd=tmpd;mkdir -p $tmpd;	
+	cat $1 > $tmpd/a	
+	awk -v OFS="\t" '{ print 1,$2,$3,$4,$5;}' $tmpd/a | sort -u > $tmpd/b 
+	echo "N= "`cat $tmpd/b | wc -l`>&2;
+
+	
+	fisher_test $tmpd/b \
+	| awk -v OFS="," '{ print $2,$3,$4,$5"\t"$6,$7;}' > $tmpd/ta
+
+	cat $tmpd/a | awk -v OFS="," '{print $1"\t"$2,$3,$4,$5;}' | sort -k2,2 \
+	| join -o 1.1,0,2.2 -1 2 -2 1 - $tmpd/ta \
+	| perl -ne 'chomp; my @a=split/ /,$_; $a[1]=~s/,/\t/g;$a[2]=~s/,/\t/g;
+		print join("\t",@a),"\n";'
+	rm -rf $tmpd
+}
 test_fisher_test(){
 echo \
 'one	1	20	10	2
