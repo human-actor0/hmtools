@@ -37,7 +37,28 @@ min(){
 
 cor(){
         cat $1 | R --no-save -q -e 'tt=read.table("stdin",header=F);cor(tt[,1],tt[,2],method="spearman" );' \
-        | perl -ne 'chomp;if($_=~/\[1\] ([\d|\.]+)/){print $1;}'
+        | perl -ne 'chomp;if($_=~/\[1\] ([\-|\d|\.]+)/){print $1;}'
+}
+
+cor_to_hclust(){
+	cmd='
+		tt=read.table("stdin",header=F);
+		x=as.character(unique(c(as.character(tt[,1]),as.character(tt[,2]))));
+		tt;
+		#tt=rbind(tt,data.frame(V1=x,V2=x,V3=1));
+		tt[,3]=1-tt[,3];
+		d=as.dist(xtabs(tt[, 3] ~ tt[,2] + tt[,1]));
+		d;
+		png("cor.png"); plot(hclust(d));dev.off();
+	'
+	cut -f 1 $1  > a
+	cut -f 2 $1 >> a
+	rm -f b;
+	for f in `sort -u a`;do
+		echo -e "$f\t$f\t1" >> b;
+	done
+	cat $1 b | sort -k1,2| run_R "$cmd"
+	rm -rf a b
 }
 
 pcombine_fisher(){
