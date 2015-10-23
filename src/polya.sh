@@ -78,22 +78,47 @@ pa_de2(){
 	join -a 1 -a 2 -e "I" -o 0,1.2,2.2 $tmpd/a $tmpd/b | tr " ;" "\t" 
 	rm -rf $tmpd
 }
+pa_de_merge(){
+	local files=`echo $@ | quote`;
+	cmd='files=c('"$files"');
+		d=NULL;
+		for( f in files ){
+			tt=read.table(f,header=F,stringsAsFactors=F);
+			colnames(tt)=c("chrom","start","end","name","score","strand",f);
+			if(is.null(d)){ d=tt;
+			}else{ d=merge(d,tt,by=c(1:6),all=T); }
+		}
+		#colnames(d)=gsub("tmpd\\/","",colnames(d));
+		d[ is.na(d) ] = "I";
+		write.table(d,file="stdout",col.names=T,row.names=F,quote=F,sep="\t");
+	'
+	#echo "$cmd";
+	run_R "$cmd" 
+}
+
+pa_prep_test_relativefreq(){
+usage="
+        $FUNCNAME <target> <trt.bed> <ctr.bed> [-s|-S]
+"
+if [ $# -lt 3 ];then echo "$usage"; return; fi
+        local opts=${4:-""};
+        bed_join $2 $3 \
+        | intersectBed -a $1 -b stdin -wa -wb $opts \
+        | perl -ne 'chomp; my @a=split /\t/,$_;
+                $a[10]=0; ## this allows cross comparisons
+                print join(";",@a[6..11]),"\t",
+                        join(",",@a[0..5]),"\t",
+                        join("\t",@a[12..$#a]),"\n";' \
+        | igx_to_igxnx - \
+        | awk -v OFS="\t" '{ print $1"@"$2,$3,$4,$5,$6;}'
+}
 
 pa_test_relativefreq(){
 usage="
 	$FUNCNAME <target> <trt.bed> <ctr.bed> [-s|-S] 
 "
 if [ $# -lt 3 ];then echo "$usage"; return; fi
-	local opts=${4:-""};
-	bed_join $2 $3 \
-	| intersectBed -a $1 -b stdin -wa -wb $opts \
-	| perl -ne 'chomp; my @a=split /\t/,$_; 
-		$a[10]=0; ## this allows cross comparisons
-		print join(";",@a[6..11]),"\t",
-			join(",",@a[0..5]),"\t",
-			join("\t",@a[12..$#a]),"\n";' \
-	| igx_to_igxnx - \
-	| awk -v OFS="\t" '{ print $1"@"$2,$3,$4,$5,$6;}' \
+	pa_prep_test_relativefreq $@ \
 	| fisher_test - | padjust - -1 \
 	| tr "@" "\t" | tr ";" "\t" 
 }
@@ -162,7 +187,11 @@ if [ $# -lt 3 ];then echo "$usage"; return; fi
 	| awk -v OFS=";" '{ print $1,$2,$3,$4,$5,$6"\t"$8"\t"$11;}' \
 	| sort -k1,1 | groupBy -g 1 -c 2,3 -o collapse,collapse > $tmpd/tb
 
-	join -a 1 -a 2 -j 1 -e NA -o 0,1.2,1.3,2.2,2.3 $tmpd/ta $tmpd/tb | tr " " "\t" 
+	join -j 1 -o 0,1.2,1.3,2.2,2.3 $tmpd/ta $tmpd/tb | tr " " "\t" \
+	| test_lineartrend - \
+	| awk -v OFS="\t" '{ if(substr($1,length($1),1)=="-"){ $6=-$6;} print $0;}' \
+	| padjust - -1 
+
 	rm -rf $tmpd;
 }
 
