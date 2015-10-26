@@ -59,7 +59,23 @@ usage: $FUNCNAME <fisherTestOut> <fdr> [type]
 				}
 			}
 		' | tr "," "\t"
-	else
+	elif [ $Type = "lineartrend" ];then
+		local MINS=`cat $tmpd/a \
+		| awk -v FDR=$FDR '$(NF)<=FDR' \
+		| head \
+		| perl -ne 'chomp;my @a=split/\t/,$_; my $sum=0;
+			foreach my $b ( (split/,/,$a[7]),(split/,/,$a[9])){ $sum += $b; }
+			print $sum,"\n";
+		' | min - `
+
+		cat $tmpd/a | perl -ne 'chomp;my @a=split/\t/,$_; my $sum=0; my $d="I";
+			foreach my $b ( (split/,/,$a[7]),(split/,/,$a[9])){ $sum += $b; }
+			if( $a[$#a] <= '$FDR'){
+				if( $a[$#a-2] > 0){ $d="P"; }else{ $d="N"; }
+			}elsif ( $sum >= '$MINS' ){ $d="U";}
+			print join("\t",@a[0..5]),"\t",$d,"\n";
+		'
+	else 
 		cat $tmpd/a | awk -v OFS="\t" -v FDR=$FDR -v MINS=$mins '{
 			s=$8+$9+$10+$11; fdr=$(NF); OR=$(NF-2);
 			d="I";#low sample
@@ -180,16 +196,17 @@ if [ $# -lt 3 ];then echo "$usage"; return; fi
 	mycat $1 > $tmpd/t
 
 	intersectBed -a $tmpd/t -b $2 -wa -wb $opts \
-	| awk -v OFS=";" '{ print $1,$2,$3,$4,$5,$6"\t"$8"\t"$11;}' \
+	| awk -v OFS=";" '{ print $1,$2,$3,$4,$5,$6"\t"$8-$2"\t"$11;}' \
 	| sort -k1,1 | groupBy -g 1 -c 2,3 -o collapse,collapse > $tmpd/ta
 
 	intersectBed -a $tmpd/t -b $3 -wa -wb $opts \
-	| awk -v OFS=";" '{ print $1,$2,$3,$4,$5,$6"\t"$8"\t"$11;}' \
+	| awk -v OFS=";" '{ print $1,$2,$3,$4,$5,$6"\t"$8-$2"\t"$11;}' \
 	| sort -k1,1 | groupBy -g 1 -c 2,3 -o collapse,collapse > $tmpd/tb
 
 	join -j 1 -o 0,1.2,1.3,2.2,2.3 $tmpd/ta $tmpd/tb | tr " " "\t" \
-	| test_lineartrend - \
-	| awk -v OFS="\t" '{ if(substr($1,length($1),1)=="-"){ $6=-$6;} print $0;}' \
+	| lineartrend_test - \
+	| tr ";" "\t" \
+	| awk -v OFS="\t" '{ if($6=="-"){ $11=-$11;} print $0;}' \
 	| padjust - -1 
 
 	rm -rf $tmpd;

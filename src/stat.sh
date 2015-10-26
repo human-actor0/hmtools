@@ -194,7 +194,8 @@ cmd='
 	cmd=${cmd/PCOL/$2};
 	cat $1 | run_R "$cmd"
 }
-test_lineartrend(){
+
+lineartrend_test(){
 cmd='
 from scipy.stats.stats import pearsonr
 from scipy.stats import chi2
@@ -232,56 +233,17 @@ for line in sys.stdin:
 	try:
 		#r,p = test_lineartrend(x1,y1,x2,y2)
 		r,p = test_lineartrend(x2,y2,x1,y1)
-		print "\t".join(map(str, a + [r,p]))
+		print "\t".join(map(str,a + [r,p]))
 	except ValueError:
 		1
 '
 	tmpd=`mymktempd`;	
 	echo "$cmd" > $tmpd/cmd
-	cat $1 | python $tmpd/cmd \
-	| padjust - -1
+	cat $1 | python $tmpd/cmd 
 	rm -rf $tmpd
-
 	#| awk -v OFS="\t" 'BEGIN{print "id","x1","y1","x2","y2","r","pval";}{ print $0;}' \
 }
 
-test_fisherexact(){
-usage="
-usage: $FUNCNAME <file> [pseudo_zero]
- <file>: columns of id, group, ctr_count, trt_count
-"
-cmd='
-        tt=read.table("stdin",header=T);
-	G=tt$group;
-        gs=ave(1:length(G),G,FUN=length); ## group sum
-
-        G=G[gs>1]; tt=tt[gs>1,];
-        m=cbind(tt$ctr_count,tt$trt_count);
-        M=apply(m,2,function(x){ ave(x,G,FUN=sum)}) ## group sum
-
-	PM= apply(m,2,sum); M[gs==1,1]=PM[1]; M[gs==1,2]=PM[2];
-
-        pval=unlist(apply(cbind(m,M-m),1,function(x){ fisher.test(matrix(x,byrow=F,nrow=2))$p.value }))
-        fdr=p.adjust(pval,method="fdr")
-        log2fc= log2((0.5+m[,2])/(m[,1]+0.5)*M[,1]/M[,2]);
-
-	tt$ctr_total=M[,1];
-	tt$trt_total=M[,2];
-        tt$log2fc=log2fc; tt$pval=pval; tt$fdr=fdr;
-        write.table(file="stdout",tt,row.names=F,col.names=T,quote=F,sep="\t");
-'
-	
-	cmd=${cmd/EPS/${2:-0}};
-	cat $1 \
-	| awk -v OFS="\t" 'BEGIN{print "id","group","ctr_count","trt_count";}{ print $0;}' \
-	| run_R "$cmd"
-	#tmpd=`make_tempdir`
-	#cmd=${cmd//stdout/$tmpd/out};
-	#echo "$cmd" > $tmpd/cmd
-	#cat $1 | R --no-save -f $tmpd/cmd &> $tmpd/log
-	#cat $tmpd/out
-	#rm -rf $tmpd
-}
 
 fisher_test(){
 ## input: id x y nx ny 
