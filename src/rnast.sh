@@ -6,7 +6,7 @@ usage="
 FUNCTION: extract 1 bp ustream position of 3'end and it's nucleotide from the reads 
 USAGE: $FUNCNAME <bed> <relpos> <size>
 "
-if [ $# -ne 3 ];then echo "$usage" >&2; fi
+if [ $# -ne 3 ];then echo "$usage" >&2; return; fi
 	cat $1 | perl -e 'use strict; my %res=();
 		my $relpos='$2'; my $size='$3';
 		while(<STDIN>){ chomp; my @a=split /\t/,$_; 
@@ -32,6 +32,7 @@ if [ $# -ne 3 ];then echo "$usage" >&2; fi
 				$subseq=reverse($subseq); $subseq=~tr/ACGTacgt/TGCAtgca/;
 			}
 
+			$start += $a[1]; $end += $a[1];
 			my $id=join("\t",($chrom,$start,$end,$strand));
 			$res{ $id }{$subseq} ++;
 		}
