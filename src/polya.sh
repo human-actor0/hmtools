@@ -1,6 +1,6 @@
 #/bin/bash  
 . $HMHOME/src/root.sh # import utilities 
-. $HMHOME/src/bed.sh #import utilities 
+. $HMHOME/src/bed.sh  #import utilities 
 . $HMHOME/src/stat.sh # import test_lineartrend test_fisherexact
 
 SEQ=$HMHOME/bin/bed_seq.sh
@@ -9,6 +9,79 @@ FILTER_M=$HMHOME/src/nb.model
 HG19FA=/hmdata/ucsc/hg19/chromosome/
 CLUSTER=$HMHOME/src/cluster_1d_kmeans.sh
 BW=$HMHOME/bin/bedGraphToBigWig
+
+pa.score(){
+usage=" 
+FUNCT : modify the score field
+USAGE: $FUNCNAME <bed6> <method>
+	<method> := count|phred
+"; 
+if [ $# -ne 2 ]; then echo "$usage"; return; fi
+	awk -v OFS="\t" -v ME=$2 '{
+		if(ME=="count"){ $5=1;
+		}else if(ME=="phred" && $5 > 0){
+			$5 = 1- exp( - $5/10 * log(10));
+		}
+	} 1' $1;
+}
+
+pa.point(){
+usage="
+FUNCT: 3' end of the reverse compment of the reads (ignoring name field)
+USAGE: $FUNCNAME <bed> <method>
+ <method> := count|phred
+" ; if [ $# -ne 2 ];then echo "$usage"; return; fi
+	pa.score $1 $2 | awk -v OFS=";" '{ st="-"; if($6 == "-"){ st="+"; $2=$3-1; }
+	 	print $1,$2,st"\t"$5; 
+	}' $1 | stat.sum - | tr ";" "\t" | awk -v OFS="\t" '{ print $1,$2,$2+1,".",$4,$3; }'
+}
+
+pa.filter(){ 
+usage="
+FUNCT: Filter inter-priming artefacts 
+USAGE: $FUNCNAME <bed> <fasta>
+REFER: heppard, S., Lawson, N.D. & Zhu, L.J., 2013.Bioinformatics (Oxford, England), 29(20), pp.2564–2571.
+"
+	if [ $# -ne 2 ]; then echo "$usage"; return; fi
+
+	eval "$SEQ -s -l 39 -r 30 $1 $2" \
+	| perl -ne 'chomp;my @a=split/\t/,$_;
+		my $s=pop @a; $s=~ s/,//g;
+		print join("@",@a),"\t",$s,"\n"; '\
+	| eval "$FILTER predict - $FILTER_M" \
+	| perl -e 'use strict; my $offset=40; my %S=();
+		my $total_sum=0; my $passed_sum=0;
+		my $total_pos=0; my $passed_pos=0;
+		while(<>){ chomp;
+			chomp;my ($bed,$seq,$pos,$score) = split/\t/,$_;
+			next if $score eq "";
+			my @a=split /@/,$bed;
+			$total_pos ++;
+			$total_sum += $a[4];
+			if($#a >=5 && $a[5] eq "-"){
+				my @b=split/,/,$score;
+				$score = join(",",reverse @b);
+			}
+			if($score > 0.5){
+				print join( "\t",@a),"\t$score\n";
+				$passed_pos ++;
+				$passed_sum += $a[4];
+			}
+		}
+	'
+}
+
+
+pa.cluster_sb(){ 
+usage="
+USAGE: $FUNCNAME <bed> <maxd>
+	<maxd> : maximum distance between features to be merged 
+"; if [ $# -ne 2 ]; then echo "$usage"; return; fi
+
+	sort -k1,1 -k2,3n $1 \
+	| mergeBed -i stdin -s -c 5,6 -o sum,distinct -d $2 \
+	| awk -v OFS="\t" -v D=$2 '{ print $1,$2,$3,"SB"D,$4,$5;}' 
+}
 
 pa_test_pcpa_vs_pa(){
 usage="
@@ -269,13 +342,6 @@ bw(){
 	rm -rf $tmpd;
 }
 
-## stat.sh::sum
-pa_point(){
-	awk -v OFS=";" '{ st="-";
-		if($6 == "-"){ st="+"; $2=$3-1; }
-	 	print $1,$2,st"\t"$5; 
-	}' $1 | sum - | tr ";" "\t" | awk -v OFS="\t" '{ print $1,$2,$2+1,".",$4,$3; }'
-}
 test__point(){
 echo \
 "c	1	4	a1	1	+
@@ -289,42 +355,7 @@ check obs exp
 rm -f obs exp
 }
 
-filter(){ 
-	usage="$FUNCNAME <bed> <fasta>"
-	if [ $# -ne 2 ]; then echo "$usage"; return; fi
 
-	eval "$SEQ -s -l 39 -r 30 $1 $2" \
-	| perl -ne 'chomp;my @a=split/\t/,$_;
-		my $s=pop @a; $s=~ s/,//g;
-		print join("@",@a),"\t",$s,"\n"; '\
-	| eval "$FILTER predict - $FILTER_M" \
-	| perl -e 'use strict; my $offset=40; my %S=();
-		my $total_sum=0; my $passed_sum=0;
-		my $total_pos=0; my $passed_pos=0;
-		while(<>){ chomp;
-			chomp;my ($bed,$seq,$pos,$score) = split/\t/,$_;
-			next if $score eq "";
-			my @a=split /@/,$bed;
-			$total_pos ++;
-			$total_sum += $a[4];
-			if($#a >=5 && $a[5] eq "-"){
-				my @b=split/,/,$score;
-				$score = join(",",reverse @b);
-			}
-			if($score > 0.5){
-				print join( "\t",@a),"\t$score\n";
-				$passed_pos ++;
-				$passed_sum += $a[4];
-			}
-		}
-	'
-}
-
-pa_cluster_sb(){ # snowballing
-	sort -k1,1 -k2,3n $1 \
-	| mergeBed -i stdin -s -c 5,6 -o sum,distinct -d $2 \
-	| awk -v OFS="\t" -v D=$2 '{ print $1,$2,$3,"SB"D,$4,$5;}' 
-}
 cluster1(){
 	MIND=$2;
 	local tmpd=`make_tempdir`;

@@ -37,22 +37,28 @@ mymktempd(){
 
 run_R(){
 usage="
-usage: $FUNCNAME <Rscript> 
+usage: $FUNCNAME <Rscript> [flag]
+	[flag] := log: print log
 "
         cmd=$1;
 	local tmpd=`mymktempd`;
         cmd=${cmd/stdout/$tmpd/out}
+
         echo "$cmd" > $tmpd/cmd
         R --no-save -q -f $tmpd/cmd &> $tmpd/log;
 	if [ -f $tmpd/out ];then
 		cat $tmpd/out
-	else
+	fi
+	local flag=${2:-""};
+
+	if [ "$flag" = "log" ];then 
 		cat $tmpd/log
 	fi
 	rm -rf $tmpd;
 }
 quote(){
-	perl -ne 'chomp; print join(",", map{ "\"$_\"" } split( /\s+/,$_ )),"\n"';
+	local del=${2:-","};
+	perl -ne 'chomp; print join("'$del'", map{ "\"$_\"" } split( /\s+/,$_ )),"\n"';
 }
 
 # array=( "${array[@]/%/_content}" )

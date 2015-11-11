@@ -12,7 +12,8 @@ sam_to_bed(){
 		my $cigar=$a[5];
 		my $seq=$a[9];
 		my $len=0;
-		my $strand="+"; if ( 16 & $flag){ $strand="-"; }
+		#my $strand="+"; if ( $flag & 16 ){ $strand="-"; }
+		my $strand="+"; if ( $flag & (0x10) ){ $strand="-"; }
 
 		my $gseq=""; # genomic sequence 
 		my $offset=0;
