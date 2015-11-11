@@ -2,6 +2,92 @@
 . $HMHOME/src/root.sh
 . $HMHOME/src/stat.sh
 
+bed.mhits(){
+
+usage="
+FUNCT: redistribute multi-hits
+USAGE: $FUNCNAME <target> <multi_reads> [-s|-S]
+"; if [ $# -lt 2 ];then echo $usage; return; fi
+local MAXITER=100;
+local DELTA=0.01;
+
+	intersectBed -a $1 -b $2 -wa -wb ${3:-""} \
+	| perl -e 'use strict; 
+
+		my $MAXITER='$MAXITER';
+		my $DELTA='$DELTA';
+
+		my %E=(); # gene expression frequency
+		my %A=(); # read to gene fraction
+		my %R=(); # read to gene assignment
+		my %G=(); # gene to read assignment
+		my %L=(); # gene lengths
+		my $s=0;
+		while(<STDIN>){chomp;
+			my ($chr,$start,$end,$gene,$score,$strand, $chr2,$start1,$end1,$read,$score1,$strand1)=split /\t/,$_;
+			$L{$gene}=$end-$start;
+			$E{$gene} += $score1/$L{$gene};	
+			$R{$read}{$gene} = $score1;
+			$G{$gene}{$read} = 1;
+			$s += $E{$gene};
+		}
+		foreach my $k (keys %E){ $E{$k} /= $s; }
+
+		foreach my $k (keys %E){ print $k," ",$E{$k},"\n"; }
+
+		foreach my $iter ( 1..$N){
+			## update A
+			foreach my $r (keys %R){
+				my $s=0;
+				foreach my $g (keys %{$R{$r}}){
+					$A{$r}{$g} += $E{$g};
+					$s += $E{$g};
+				}
+				foreach my $g (keys %{$R{$r}}){
+					$A{$r}{$g} /= $s;
+				}
+			}
+
+			## update E
+			$s=0;
+			foreach my $g (keys %E){
+				my $s2=0;
+				foreach my $r (keys %{$G{$g}}){
+					$s2 += $A{$r}{$g};	
+				}
+				$E{$g}=$s2/$L{$g};
+				$s += $E{$g};
+			}
+			foreach my $k (keys %E){ $E{$k} /= $s; }
+
+			#foreach my $k1 (keys %A){ 
+			#foreach my $k2 (keys %{$A{$k1}}){ print $k1," ",$k2," ",$A{$k1}{$k2},"\n"; }}
+			print "ITER--$iter\n";
+			foreach my $k (keys %E){ print $k," ",$E{$k},"\n"; }
+		}
+
+		
+	'
+}
+bed.mhits.test(){
+echo \
+"c	0	100	t1	0	+
+c	100	200	t2	0	+
+c	300	400	t3	0	+" > genes
+
+echo \
+"c	10	20	r1	1	+
+c	100	120	r1	1	+
+c	1000	1020	r1	1	+
+c	110	130	r2	1	+
+c	320	340	r2	1	+
+c	50	70	r2	1	+
+c	50	70	r3	1	+
+c	350	370	r3	1	+ " > reads
+
+bed.multihits genes reads
+}
+
 bed_nf(){
 	head -n 1 $1 | awk '{print NF;}'
 }
@@ -150,6 +236,7 @@ bed_splitByChrom(){
 	echo `ls $2/*`;	## return a list of splited files
 }
 
+
 modify_score(){
 usage="$FUNCNAME <bed6> <method>
 	<method>: count phred
@@ -159,9 +246,7 @@ usage="$FUNCNAME <bed6> <method>
 		if(ME=="count"){
 			$5=1;
 		}else if(ME=="phred"){
-			if ( $5 == 0){
-				$5 = 0.1;
-			}else{
+			if( $5 > 0){
 				$5 = 1- exp( - $5/10 * log(10));
 			}
 		}

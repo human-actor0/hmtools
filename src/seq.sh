@@ -26,6 +26,9 @@ usage="$FUNCNAME <seq> <mutations>";
 		print "\n";
 	'	
 }
+
+
+
 test__mutate(){
 echo \
 "AAAA CAAA GAAA TAAA ACAA AGAA ATAA AACA AAGA AATA AAAC AAAG AAAT" > exp

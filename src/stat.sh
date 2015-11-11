@@ -1,6 +1,6 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
-sum(){
+stat.sum(){
 	cat $1 | perl -e 'use strict; my %res=();
 	while(<STDIN>){ chomp; my @a=split/\t/,$_;
 		$res{ $a[0] } += $a[1]; 
@@ -8,6 +8,58 @@ sum(){
 	foreach my $k (keys %res){
 		print $k,"\t",$res{$k},"\n";
 	}'
+}
+
+stat.prep(){
+usage="
+FUNCT: make a merged table with headers 
+USAGE: $FUNCNAME <trt1>[,<trt2 ..]  <ctr1>[,<ctr2..]
+"; if [ $# -ne 2 ];then echo "$usage"; return; fi
+
+        trt=`echo $1 | tr "," " " | quote -`;
+        ctr=`echo $2 | tr "," " " | quote -`;
+        run_R '
+                trt=c('$trt'); ctr=c('$ctr');
+                d=NULL;
+                for( i in 1:length(trt)){
+                        tt=read.table(trt[i],header=F);
+                        colnames(tt)=c("id",paste("trt",i,".c1",sep=""), paste("trt",i,".c2",sep=""));
+                        if( is.null(d)){ d=tt;
+                        }else{ d=merge(d,tt,by="id",all=T); }
+                }
+                for( i in 1:length(ctr)){
+                        tt=read.table(ctr[i],header=F);
+                        colnames(tt)=c("id",paste("ctr",i,".c1",sep=""), paste("ctr",i,".c2",sep=""));
+                        d=merge(d,tt,by="id",all=T);
+                }
+		d[ is.na(d) ] = 0;
+		write.table(file="stdout",d, col.names=T,quote=F,sep="\t", row.names=F);
+        ' 
+}
+
+stat.prep.test(){
+echo \
+"a	1	10
+b	2	20
+c	3	30" > trt1
+echo \
+"a	11	10
+b	22	20
+c	33	30" > trt2
+echo \
+"a	11	10
+b	22	20
+c	33	30" > ctr1
+
+echo \
+"id	trt1.c1	trt1.c2	trt2.c1	trt2.c2	ctr1.c1	ctr1.c2
+a	1	10	11	10	11	10
+b	2	20	22	20	22	20
+c	3	30	33	30	33	30" > exp
+
+	stat.prep trt1,trt2 ctr1  > obs
+	check exp obs
+	rm -rf trt1 trt2 ctr1 exp obs
 }
 add(){
 	perl -e 'use strict; my %res=();
@@ -120,27 +172,25 @@ check obs exp
 rm obs exp
 }
 #test__igx_to_igxnx
-
-test_edger(){
+stat.edger_test(){
 	## INPUT: comma separated control and treatment EI file ( bed6 + x + nx )
 	## OUTPUT: bed6 + logFC + pvalue 
-	local rcmd='
+	cat $1 | run_R '
 	tt=read.table("stdin",header=T);
-	cn=colnames(tt)[3:ncol(tt)];
-	group=rep(1,length(cn)); group[ grep("t.",cn)]=2;
-	event=rep(1,length(cn)); event[ grep(".x",cn)]=2;
+	cn=colnames(tt)[2:ncol(tt)];
+	group=rep(1,length(cn)); group[ grep("trt",cn)]=2;
+	event=rep(1,length(cn)); event[ grep(".c2",cn)]=2;
 	
 		
 	#ix=apply(D[,7:ncol(D)], 1, min) > 0 & apply(D[,7:ncol(D)],1,max) > 10
 	library(edgeR)
-	y=DGEList(counts=tt[,3:ncol(tt)],group=factor(group));
+	y=DGEList(counts=tt[,2:ncol(tt)],group=factor(group));
 	y=calcNormFactors(y);
 
 	event.this=factor(event);
 	group.this=factor(group);
 	H1 <- model.matrix(~ event.this + group.this + event.this:group.this, data=y$samples )
 	H0 <- model.matrix(~ event.this + group.this )
-	print (H1)
 	coef <- (ncol(H0)+1):ncol(H1)
 	#y=estimateCommonDisp(y)
 	#y=estimateTagwiseDisp(y, trend="movingave")
@@ -151,31 +201,18 @@ test_edger(){
 	fit=glmFit(y$counts, H1, y$tagwise.dispersion,offset=0,prior.count=0)
 	llh=glmLRT(fit,coef=coef)
 
-	ex.h0=apply( y$counts[,group.this == 1 & event.this == 1], 1, sum);
-	in.h0=apply( y$counts[,group.this == 1 & event.this == 2], 1, sum);
-
-	out="OUT";
-	res=data.frame(tt, logIR=log( in.h0/ ex.h0), logFC=llh$table$logFC, pval=llh$table$PValue)
+	res=data.frame(tt, logFC=llh$table$logFC, pval=llh$table$PValue)
 	## chrom start end logFC pval
-	write.table(res, out, col.names=T,row.names=F,sep="\t",quote=F);
-	'
-
-	local tmpd=`make_tempdir`;
-	rcmd=${rcmd/OUT/$tmpd/out}
-	echo "$rcmd" > $tmpd/a
-	cat $1 | R --no-save -f $tmpd/a >&2
-	cat $tmpd/out
-	rm -rf $tmpd
+	write.table(res,file="stdout", col.names=T,row.names=F,sep="\t",quote=F);
+	' $2
 }
-test__test_edger(){
+stat.edger_test.test(){
 echo \
-"id	group	c.x	c.x	t.x	c.n	c.n	t.n
-id1	g1	1	1	20	3	30	20
-id2	g2	2	1	22	4	31	20
-id4	g2	4	1	24	6	31	20" \
-| test_edger - 
+"id	trt1.c1	trt1.c2	trt2.c1	trt2.c2	ctr1.c1	ctr1.c2
+a	1	10	11	10	11	10
+b	2	20	22	20	22	20
+c	3	30	33	30	33	30" | stat.edger_test -
 }
-#test__test_edger
 
 padjust(){
 usage="
