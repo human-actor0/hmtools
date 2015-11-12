@@ -8,10 +8,11 @@ usage="
 FUNCT: redistribute multi-hits
 USAGE: $FUNCNAME <target> <multi_reads> [-s|-S]
 "; if [ $# -lt 2 ];then echo $usage; return; fi
-local MAXITER=100;
+local MAXITER=20;
 local DELTA=0.01;
+local OPT=${3:-""};
 
-	intersectBed -a $1 -b $2 -wa -wb ${3:-""} \
+	intersectBed -a $1 -b $2 -wa -wb $OPT \
 	| perl -e 'use strict; 
 
 		my $MAXITER='$MAXITER';
@@ -35,7 +36,7 @@ local DELTA=0.01;
 
 		foreach my $k (keys %E){ print $k," ",$E{$k},"\n"; }
 
-		foreach my $iter ( 1..$N){
+		foreach my $iter ( 1..$MAXITER){
 			## update A
 			foreach my $r (keys %R){
 				my $s=0;
@@ -85,7 +86,8 @@ c	50	70	r2	1	+
 c	50	70	r3	1	+
 c	350	370	r3	1	+ " > reads
 
-bed.multihits genes reads
+bed.mhits genes reads
+rm -rf genes reads
 }
 
 bed_nf(){
@@ -186,11 +188,11 @@ bed_flank(){
 	}' $1;
 }
 
-bed_3p(){
+bed.3p(){
  	awk -v OFS="\t" '{ if($6=="-"){$3=$2+1;} $2=$3-1; print $0; }' $1
 }
 
-bed_5p(){
+bed.5p(){
  	awk -v OFS="\t" '{if($6=="-"){$2=$3-1;}$3=$2+1; print $0; }' $1
 }
 sort_bed(){

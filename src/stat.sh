@@ -23,13 +23,14 @@ USAGE: $FUNCNAME <trt1>[,<trt2 ..]  <ctr1>[,<ctr2..]
                 d=NULL;
                 for( i in 1:length(trt)){
                         tt=read.table(trt[i],header=F);
-                        colnames(tt)=c("id",paste("trt",i,".c1",sep=""), paste("trt",i,".c2",sep=""));
+			j=ncol(tt)-1;
+                        colnames(tt)=c("id",paste(paste("trt",i,sep=""),".c",1:j,sep="")); 
                         if( is.null(d)){ d=tt;
                         }else{ d=merge(d,tt,by="id",all=T); }
                 }
                 for( i in 1:length(ctr)){
                         tt=read.table(ctr[i],header=F);
-                        colnames(tt)=c("id",paste("ctr",i,".c1",sep=""), paste("ctr",i,".c2",sep=""));
+                        colnames(tt)=c("id",paste(paste("ctr",i,sep=""),".c",1:j,sep="")); 
                         d=merge(d,tt,by="id",all=T);
                 }
 		d[ is.na(d) ] = 0;
