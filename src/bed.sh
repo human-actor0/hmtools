@@ -5,55 +5,54 @@
 bed.mhits(){
 
 usage="
-FUNCT: redistribute multi-hits
+FUNCT: redistribute multi-hits using EM algorithm
 USAGE: $FUNCNAME <target> <multi_reads> [-s|-S]
-"; if [ $# -lt 2 ];then echo $usage; return; fi
-local MAXITER=20;
-local DELTA=0.01;
+"; if [ $# -lt 2 ];then echo "$usage"; return; fi
+local MAXITER=100;
+local DELTA=0.001;
 local OPT=${3:-""};
 
 	intersectBed -a $1 -b $2 -wa -wb $OPT \
 	| perl -e 'use strict; 
-
 		my $MAXITER='$MAXITER';
 		my $DELTA='$DELTA';
 
-		my %E=(); # gene expression frequency
-		my %A=(); # read to gene fraction
-		my %R=(); # read to gene assignment
-		my %G=(); # gene to read assignment
+		my %G=(); # gene id
+		my %R=(); # read id
+
+		my %E=(); # relative,normalized gene expression frequency
+		my %A=(); # a fraction of a read attributed to a gene 
+		my %B=(); # helper
 		my %L=(); # gene lengths
+		my $TOT=0; # total weighted reads
 		my $s=0;
+		my $gid=0; my $rid=0;
 		while(<STDIN>){chomp;
 			my ($chr,$start,$end,$gene,$score,$strand, $chr2,$start1,$end1,$read,$score1,$strand1)=split /\t/,$_;
-			$L{$gene}=$end-$start;
-			$E{$gene} += $score1/$L{$gene};	
-			$R{$read}{$gene} = $score1;
-			$G{$gene}{$read} = 1;
-			$s += $E{$gene};
+			if(defined $G{$gene}){ $gid=$G{$gene}; }else{ $gid++; $G{$gene}=$gid; }
+			if(defined $R{$read}){ $rid=$R{$read}; }else{ $rid++; $R{$read}=$rid; }
+			
+			$L{$gid}=$end-$start;
+			$A{$rid}{$gid} = $score1;
+			$B{$gid}{$rid} = $score1;
+			$E{$gid} = 0;
 		}
-		foreach my $k (keys %E){ $E{$k} /= $s; }
-
-		foreach my $k (keys %E){ print $k," ",$E{$k},"\n"; }
-
-		foreach my $iter ( 1..$MAXITER){
-			## update A
-			foreach my $r (keys %R){
-				my $s=0;
-				foreach my $g (keys %{$R{$r}}){
-					$A{$r}{$g} += $E{$g};
-					$s += $E{$g};
-				}
-				foreach my $g (keys %{$R{$r}}){
-					$A{$r}{$g} /= $s;
-				}
+		## weight 1/n for multi-reads
+		foreach my $r (keys %A){
+			my $n=scalar keys %{$A{$r}};
+			foreach my $g (keys %{$A{$r}}){
+				$A{$r}{$g} /= $n;	
+				$TOT += $A{$r}{$g};
 			}
-
+		}
+		my %E1=(); # copy of the previous E
+		foreach my $iter ( 1..$MAXITER){
 			## update E
 			$s=0;
-			foreach my $g (keys %E){
+			foreach my $g (keys %B){
+				$E1{$g}=$E{$g}; ## backup
 				my $s2=0;
-				foreach my $r (keys %{$G{$g}}){
+				foreach my $r (keys %{$B{$g}}){
 					$s2 += $A{$r}{$g};	
 				}
 				$E{$g}=$s2/$L{$g};
@@ -61,13 +60,30 @@ local OPT=${3:-""};
 			}
 			foreach my $k (keys %E){ $E{$k} /= $s; }
 
-			#foreach my $k1 (keys %A){ 
-			#foreach my $k2 (keys %{$A{$k1}}){ print $k1," ",$k2," ",$A{$k1}{$k2},"\n"; }}
-			print "ITER--$iter\n";
-			foreach my $k (keys %E){ print $k," ",$E{$k},"\n"; }
-		}
+			## update A : for each read calculate relative contributions to its target genes
+			foreach my $r (keys %A){
+				$s=0;
+				foreach my $g (keys %{$A{$r}}){
+					$A{$r}{$g}=$E{$g};
+					$s += $E{$g};
+				}
+				foreach my $g (keys %{$A{$r}}){
+					$A{$r}{$g} = $E{$g}/$s;
+				}
+			}
 
-		
+
+			my $d=0;
+			foreach my $k (keys %E){ $d += abs($E{$k} -$E1{$k});} 
+			$d /= scalar keys %E;
+			#print "ITER--$iter: $d\n";
+			#foreach my $k (keys %E){ print $k," ",$E{$k},"\n"; }
+			if($d <= $DELTA ){ last; }
+		}
+		foreach my $g (keys %G){
+			print $g,"\t",$E{ $G{$g} }* $TOT,"\n";
+		}
+		#foreach my $r (keys %A){ foreach my $g (keys %{$A{$r}}){ print $r,"\t",$g,"\t",$A{$r}{$g},"\n"; }}
 	'
 }
 bed.mhits.test(){
@@ -77,14 +93,13 @@ c	100	200	t2	0	+
 c	300	400	t3	0	+" > genes
 
 echo \
-"c	10	20	r1	1	+
-c	100	120	r1	1	+
-c	1000	1020	r1	1	+
-c	110	130	r2	1	+
-c	320	340	r2	1	+
-c	50	70	r2	1	+
-c	50	70	r3	1	+
-c	350	370	r3	1	+ " > reads
+"c	10	21	r1	1	+
+c	10	21	r4	1	+
+c	300	310	r1	1	+
+c	110	120	r2	1	+
+c	310	320	r2	1	+
+c	13	23	r3	1	+
+c	150	170	r3	1	+" > reads
 
 bed.mhits genes reads
 rm -rf genes reads
@@ -230,12 +245,15 @@ split_bam(){
 	echo `ls $2/*`;
 }
 
-bed_splitByChrom(){
+bed.split(){
+usage="
+USAGE: $FUNCNAME <bed> <outdir>
+"; if [ $# -ne 2 ];then echo "$usage"; return; fi
+	mkdir -p $2;
 	awk -v OFS="\t" -v O=$2 '{
 		fout=O"/"$1;
 		print $0 >> fout;
 	}' $1
-	echo `ls $2/*`;	## return a list of splited files
 }
 
 
