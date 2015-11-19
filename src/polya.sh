@@ -10,6 +10,31 @@ HG19FA=/hmdata/ucsc/hg19/chromosome/
 CLUSTER=$HMHOME/src/cluster_1d_kmeans.sh
 BW=$HMHOME/bin/bedGraphToBigWig
 
+
+pa.point(){
+usage=" 
+FUNCT : find cleavage points from the reads in a bam file 
+USAGE : $FUNCNAME <bam> <odir>
+"
+if [ $# -ne 2 ];then echo "$usage"; return; fi
+	samtools view -bq 1 $1 | bamToBed -split \
+        | bed.n2i - | bed.3p - | bed.ss - | bed.split - $2
+}
+pa.segment(){
+usage="
+FUNCT: collect proximal points before applying clustering algorithms 
+USAGE: $FUNCNAME <points_dir> <mdist> <ofile>
+	<mdist> : maximum distnce between points within a segment
+"; if [ $# -ne 3 ]; then echo "$usage"; return; fi
+	if [ -f $3 ]; then rm -rf $3; fi
+	for f in $1/*;do 
+		local O=$1/segments/${f##*/};
+		sort -k1,1 -k2,3n $f \
+		| mergeBed -i stdin -s -c 6 -o distinct -d $2 \
+		| awk -v OFS="\t" '{ print $1,$2,$3,$1","$2","$3","$4,$3-$2,$4;}' >> $3;
+	done
+}
+
 pa.score(){
 usage=" 
 FUNCT : modify the score field
@@ -25,7 +50,7 @@ if [ $# -ne 2 ]; then echo "$usage"; return; fi
 	} 1' $1;
 }
 
-pa.point(){
+pa.point2(){
 usage="
 FUNCT: 3' end of the reverse compment of the reads (ignoring name field)
 USAGE: $FUNCNAME <bed> <method>
@@ -80,7 +105,7 @@ USAGE: $FUNCNAME <bed> <maxd>
 
 	sort -k1,1 -k2,3n $1 \
 	| mergeBed -i stdin -s -c 5,6 -o sum,distinct -d $2 \
-	| awk -v OFS="\t" -v D=$2 '{ print $1,$2,$3,"SB"D,$4,$5;}' 
+	| awk -v OFS="\t" -v D=$2 '{ print $1,$2,$3,"SB"D"_"NR,$4,$5;}' 
 }
 
 pa_test_pcpa_vs_pa(){

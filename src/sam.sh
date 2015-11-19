@@ -1,6 +1,13 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
 
+sam.csize(){
+        if [ ! -f $1.bai ];then
+                samtools index $1;
+        fi
+        samtools idxstats $1 | awk -v OFS="\t" '$1 != "*" && $3 > 0 { print $1,$2;}'
+}
+
 # reference from https://samtools.github.io/hts-specs/SAMv1.pdf
 sam_to_bed(){
 	cat $1 | perl -ne 'chomp; my @a=split/\t/,$_;
