@@ -57,6 +57,7 @@ cmd='
    	open (F, "FA") or die "$!";
 	    while(<F>){ chomp;
 		if($_=~/>([\w|\d]+)/){ $chrom=$1; next;}
+		print $chrom,"-hi\n";
 		$seq{$chrom} .= $_;
 	    }
 	close(F);

@@ -2,6 +2,64 @@
 . $HMHOME/src/root.sh
 . $HMHOME/src/stat.sh
 
+bed.split(){
+usage="
+USAGE: $FUNCNAME <bed> <outdir>
+"; if [ $# -ne 2 ];then echo "$usage"; return; fi
+	if [ -d $2 ];then rm -rf $2; fi; mkdir -p $2;
+	awk -v OFS="\t" -v O=$2 '{
+		fout=O"/"$1;
+		print $0 >> fout;
+	}' $1
+}
+
+
+bed.n2i(){
+	local tmpd=`mymktempd`;
+	#local tmpd=tmpd; mkdir -p tmpd;
+	cat $1 | perl -e 'use strict; 
+		my $fileb="'$tmpd/b'";
+		my %ref=(); 
+
+		my $id=0; my $first=1;
+		while(<STDIN>){chomp; my @a=split/\t/,$_;
+			if(defined $ref{$a[3]}){
+				$ref{$a[3]}{n} ++;
+			}else{
+				if($first==1){ $first=0;
+				}else{ $id++; }
+				$ref{$a[3]}{n} = 1;
+				$ref{$a[3]}{id} = $id;
+			}
+			$a[3]=$ref{$a[3]}{id};
+			print $a[3],"\t",join ("\t",@a),"\n";
+		}
+		
+		open(my $fh, ">",$fileb) or die "cannot open $fileb: $!";	
+		foreach my $k (keys %ref){
+			print $fh $ref{$k}{id},"\t",$ref{$k}{n},"\n";	
+		}
+		close($fh);
+	' | sort -k1,1 > $tmpd/a
+
+	sort -k1,1 $tmpd/b | join $tmpd/a - \
+	| perl -ne 'chomp; my @a=split/\s/,$_; 
+		$a[4] .= ".".$a[$#a];
+		print join("\t",@a[1..($#a-1)]),"\n";
+	'
+	rm -rf $tmpd
+}
+
+bed.n2i.test(){
+echo \
+"c	1	2	r3	1	+
+c	1	2	r1	1	+
+c	1	2	r2	1	+
+c	1	2	r3	1	+
+c	1	2	r2	1	+
+c	1	2	r3	1	+" | bed.n2i -
+}
+
 bed.mhits(){
 
 usage="
@@ -203,6 +261,9 @@ bed_flank(){
 	}' $1;
 }
 
+bed.ss(){
+ 	awk -v OFS="\t" '{ s="-"; if($6=="-"){ s="+";} $6=s; }1' $1
+}
 bed.3p(){
  	awk -v OFS="\t" '{ if($6=="-"){$3=$2+1;} $2=$3-1; print $0; }' $1
 }
@@ -245,16 +306,6 @@ split_bam(){
 	echo `ls $2/*`;
 }
 
-bed.split(){
-usage="
-USAGE: $FUNCNAME <bed> <outdir>
-"; if [ $# -ne 2 ];then echo "$usage"; return; fi
-	mkdir -p $2;
-	awk -v OFS="\t" -v O=$2 '{
-		fout=O"/"$1;
-		print $0 >> fout;
-	}' $1
-}
 
 
 modify_score(){
@@ -272,6 +323,9 @@ usage="$FUNCNAME <bed6> <method>
 		}
 		print $0;
 	}' $1;
+}
+bed.score(){
+	modify_score $@
 }
 bed_add(){
 	perl -e 'use strict; my %res=();
