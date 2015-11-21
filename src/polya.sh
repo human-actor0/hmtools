@@ -2,6 +2,7 @@
 . $HMHOME/src/root.sh # import utilities 
 . $HMHOME/src/bed.sh  #import utilities 
 . $HMHOME/src/stat.sh # import test_lineartrend test_fisherexact
+. $HMHOME/src/seq.sh
 
 SEQ=$HMHOME/bin/bed_seq.sh
 FILTER=$HMHOME/src/pa_filter_nb.sh
@@ -20,19 +21,24 @@ if [ $# -ne 2 ];then echo "$usage"; return; fi
 	samtools view -bq 1 $1 | bamToBed -split \
         | bed.n2i - | bed.3p - | bed.ss - | bed.split - $2
 }
-pa.segment(){
+pa.cluster_sb_uniq(){
 usage="
 FUNCT: collect proximal points before applying clustering algorithms 
 USAGE: $FUNCNAME <points_dir> <mdist> <ofile>
 	<mdist> : maximum distnce between points within a segment
 "; if [ $# -ne 3 ]; then echo "$usage"; return; fi
 	if [ -f $3 ]; then rm -rf $3; fi
+	local tmpd=`mymktempd`;
 	for f in $1/*;do 
 		local O=$1/segments/${f##*/};
-		sort -k1,1 -k2,3n $f \
-		| mergeBed -i stdin -s -c 6 -o distinct -d $2 \
-		| awk -v OFS="\t" '{ print $1,$2,$3,$1","$2","$3","$4,$3-$2,$4;}' >> $3;
+		awk '$4~/\.1$/' $f > $tmpd/a
+		if [ -s $tmpd/a ];then	
+			sort -k1,1 -k2,3n $tmpd/a \
+			| mergeBed -i stdin -s -c 5,6 -o count,distinct -d $2 \
+			| awk -v OFS="\t" '{ print $1,$2,$3,$1","$2","$3","$5,$4,$5;}' >> $3;
+		fi
 	done
+	rm -rf $tmpd;
 }
 
 pa.score(){
@@ -69,29 +75,21 @@ REFER: heppard, S., Lawson, N.D. & Zhu, L.J., 2013.Bioinformatics (Oxford, Engla
 "
 	if [ $# -ne 2 ]; then echo "$usage"; return; fi
 
-	eval "$SEQ -s -l 39 -r 30 $1 $2" \
-	| perl -ne 'chomp;my @a=split/\t/,$_;
-		my $s=pop @a; $s=~ s/,//g;
-		print join("@",@a),"\t",$s,"\n"; '\
+	bed.flank $1 39 30 -s  | seq.read $2 - -s \
+	| perl -ne 'chomp; my @a=split/\t/,$_; print join(";",@a[0..($#a-1)]),"\t",$a[$#a],"\n"' \
 	| eval "$FILTER predict - $FILTER_M" \
-	| perl -e 'use strict; my $offset=40; my %S=();
-		my $total_sum=0; my $passed_sum=0;
-		my $total_pos=0; my $passed_pos=0;
-		while(<>){ chomp;
-			chomp;my ($bed,$seq,$pos,$score) = split/\t/,$_;
-			next if $score eq "";
-			my @a=split /@/,$bed;
-			$total_pos ++;
-			$total_sum += $a[4];
-			if($#a >=5 && $a[5] eq "-"){
-				my @b=split/,/,$score;
-				$score = join(",",reverse @b);
+	| perl -ne 'chomp; my ($bed,$seq,$pos,$score)=split/\t/,$_;
+		my @a=split /;/,$bed;
+		my $len=$a[2]-$a[1];
+		my @p=split /,/,$pos;
+		my @s=split /,/,$score;
+		for(my $i=0; $i<=$#p;$i++){
+			my $this_s=sprintf("%.3f",$s[$i]); 
+			my $this_p=$p[$i];
+			if ($#a > 4 && $a[5] eq "-"){
+				$this_p=$len-$this_p-1;
 			}
-			if($score > 0.5){
-				print join( "\t",@a),"\t$score\n";
-				$passed_pos ++;
-				$passed_sum += $a[4];
-			}
+			print join("\t",($a[0],$a[1]+$this_p,$a[1]+$this_p+1,$a[3],$a[4],$a[5],$this_s)),"\n";
 		}
 	'
 }

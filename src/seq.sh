@@ -1,5 +1,6 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
+. $HMHOME/src/bed.sh
 
 seq.read(){
 usage="
@@ -8,14 +9,16 @@ USAGE: $FUNCNAME <fa> <bed> [options]
 "
 local option=${3:-""};
 if [ $# -lt 2 ]; then echo "$usage"; return; fi
-	cat $1 | perl -e 'use strict; 
+	local tmpd=`mymktempd`;
+	mycat $2 > $tmpd/a;	
+	mycat $1 | perl -e 'use strict; 
 		sub revc{
 			my ($seq) = @_;
 			$seq =~ tr/ACGTacgt/TGCAtgca/;
 			return join("",reverse(split //,$seq));
 		}
 
-		my $file="'$2'"; my $opt="'$option'";
+		my $file="'$tmpd/a'"; my $opt="'$option'";
 		my %ref=(); my $chrom="";
 		while(<STDIN>){ chomp;
 			if($_=~/>(\S+)/){ $chrom=$1; next; }		
@@ -37,6 +40,7 @@ if [ $# -lt 2 ]; then echo "$usage"; return; fi
 		close($fh);
 		
 	'
+	rm -rf $tmpd;
 }
 
 kmers(){
