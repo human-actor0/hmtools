@@ -211,7 +211,7 @@ program='
 				foreach my $y (@classes){
 					#push @res, ($i+$up_len).":".$y.":".exp($llh{$y})/$denom;
 					if($y == 1){
-						push @res_x,($i+$up_len);
+						push @res_x,($i+$up_len-1);
 						push @res_y, exp($llh{$y})/$denom;
 					}
 				}

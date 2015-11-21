@@ -252,10 +252,10 @@ bede_join(){
 	' | tr "@" "\t"
 }
 
-bed_flank(){
+bed.flank(){
 	local L=$2; local R=$3; local S=${4:-""};
 	awk -v OFS="\t" -v s=${2:-""} -v L=$L -v R=$R -v S=$S '{ 
-		if(S == "s" && $6 == "-"){
+		if(S == "-s" && $6 == "-"){
 			$2=$2-R; $3=$3+L;
 		}else{ $2=$2-L; $3=$3+R; } print $0;
 	}' $1;
