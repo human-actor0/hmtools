@@ -2,6 +2,9 @@
 . $HMHOME/src/root.sh
 . $HMHOME/src/stat.sh
 
+bed.nf(){
+	head -n 1 $1 | awk '{print NF;}'
+}
 bed.split(){
 usage="
 USAGE: $FUNCNAME <bed> <outdir>
@@ -11,6 +14,52 @@ USAGE: $FUNCNAME <bed> <outdir>
 		fout=O"/"$1;
 		print $0 >> fout;
 	}' $1
+}
+bed.count(){
+usage="
+usage: $FUNCNAME <target> <read>  [options]
+output: target + sum of read scores
+ [options]: 
+	-s : count on the same strand
+	-S : count on the opposite strand
+"
+	local opt_strand="";
+	for opt in $@;do
+		if [ $opt = "-s" ];then opt_strand="-s";
+		elif [ $opt = "-S" ];then opt_strand="-S";
+		fi
+	done
+	if [ $# -lt 2 ];then echo "$usage"; return; fi
+
+	#local tmpd=tmpd;mkdir -p $tmpd;
+	local tmpd=`mymktempd`;
+	mycat $1 | bed.split - $tmpd/a
+	mycat $2 | bed.split - $tmpd/b
+	local nf="";
+	for f in $tmpd/a/*;do
+		c=${f##*/};
+		if [ -f $tmpd/b/$c ];then
+			if [ -z $nf ];then nf=`bed.nf $f`; fi 
+			intersectBed -a $f -b $tmpd/b/$c -wa -wb $opt_strand  \
+			| awk -v nf=$nf -v OFS="\t" '{ 
+				for(i=2; i<=nf;i++){ $1=$1";"$(i); }
+				print $1,$(nf+5);
+			}' | stat.sum - | tr ";" "\t" 
+		fi
+	done
+	rm -rf $tmpd
+}
+bed.count.test(){
+echo \
+'chr	1	100	n1	0	+
+chr	50	200	n2	0	-'> a
+echo \
+'chr	1	10	r1	1	+
+chr	40	50	r2	2	+
+chr	50	200	r3	3	+' > b
+
+bed.count a b -S 
+rm -rf a b 
 }
 
 
@@ -163,9 +212,6 @@ bed.mhits genes reads
 rm -rf genes reads
 }
 
-bed_nf(){
-	head -n 1 $1 | awk '{print NF;}'
-}
 
 bed_join(){
 usage="
@@ -375,50 +421,6 @@ sum_score(){
 	| awk -v OFS="\t" '{ split($1,a,","); print a[1],$2,$3,".",$4,a[2];}'
 }
 
-bed_count(){
-usage="
-usage: $FUNCNAME <target> <read> [ <zero> [<strand>]]
-output: target + sum of read scores
-use modify_score to change scoring 
-"
-	opt_zero=${3:-0};
-	opt_strand=${4:-""};
-	if [ $# -lt 2 ];then echo "$usage"; return; fi
-
-	local tmpd=`make_tempdir`;
-	mycat $1 > $tmpd/a
-	mycat $2 > $tmpd/b
-	n=`head -n 1 $tmpd/a | awk '{print NF;}'`
-	intersectBed -a $tmpd/a -b $tmpd/b -wa -wb $opt_strand \
-	| awk -v n=$n -v OFS="\t" '{ 
-		for(i=2; i<=n;i++){
-			$1=$1"@"$(i);
-		} print $1,$(n+5);
-	}' | groupBy -g 1 -c 2 -o sum | tr "@" "\t"
-
-	if [ $opt_zero -ne 0 ]; then
-		intersectBed -a $tmpd/a -b $tmpd/b -wa -v $opt_strand \
-		| awk -v OFS="\t" '{ print $0,0;}'
-	fi
-	rm -rf $tmpd
-}
-_test_bed_count(){
-echo \
-'chr	1	100	n1
-chr	50	200	n2'> a
-echo \
-'chr	1	10	r1	1	+
-chr	40	50	r2	2	+
-chr	50	200	r3	3	+' > b
-
-bed_count a b  > obs
-echo \
-'chr	1	100	n1	6
-chr	50	200	n2	3' > exp
-check obs exp 
-
-rm a b exp obs
-}
 #_test_bed_count
 
 intersectBed_sum(){
