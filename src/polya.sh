@@ -12,7 +12,7 @@ CLUSTER=$HMHOME/src/cluster_1d_kmeans.sh
 BW=$HMHOME/bin/bedGraphToBigWig
 
 
-pa.point(){
+pa.read(){
 usage=" 
 FUNCT : find cleavage points from the reads in a bam file 
 USAGE : $FUNCNAME <bam> <odir>
@@ -21,24 +21,102 @@ if [ $# -ne 2 ];then echo "$usage"; return; fi
 	samtools view -bq 1 $1 | bamToBed -split \
         | bed.n2i - | bed.3p - | bed.ss - | bed.split - $2
 }
-pa.cluster_sb_uniq(){
+pa.filter(){ 
 usage="
-FUNCT: collect proximal points before applying clustering algorithms 
-USAGE: $FUNCNAME <points_dir> <mdist> <ofile>
-	<mdist> : maximum distnce between points within a segment
-"; if [ $# -ne 3 ]; then echo "$usage"; return; fi
-	if [ -f $3 ]; then rm -rf $3; fi
-	local tmpd=`mymktempd`;
+FUNCT: Filter inter-priming artefacts 
+USAGE: $FUNCNAME <bed> <fasta>
+REFER: heppard, S., Lawson, N.D. & Zhu, L.J., 2013.Bioinformatics (Oxford, England), 29(20), pp.2564–2571.
+"
+	if [ $# -ne 2 ]; then echo "$usage"; return; fi
+
+	bed.flank $1 39 30 -s  | seq.read $2 - -s \
+	| perl -ne 'chomp; my @a=split/\t/,$_; print join(";",@a[0..($#a-1)]),"\t",$a[$#a],"\n"' \
+	| eval "$FILTER predict - $FILTER_M" \
+	| perl -ne 'chomp; my ($bed,$seq,$pos,$score)=split/\t/,$_;
+		my @a=split /;/,$bed;
+		my $len=$a[2]-$a[1];
+		my @p=split /,/,$pos;
+		my @s=split /,/,$score;
+		for(my $i=0; $i<=$#p;$i++){
+			my $this_s=sprintf("%.3f",$s[$i]); 
+			my $this_p=$p[$i];
+			if ($#a > 4 && $a[5] eq "-"){
+				$this_p=$len-$this_p-1;
+			}
+			print join("\t",($a[0],$a[1]+$this_p,$a[1]+$this_p+1,$a[3],$a[4],$a[5],$this_s)),"\n";
+		}
+	'
+}
+pa.point(){
+usage="
+FUNCT: collect proximal points 
+USAGE: $FUNCNAME <reads_dir>
+"; if [ $# -ne 1 ]; then echo "$usage"; return; fi
 	for f in $1/*;do 
-		local O=$1/segments/${f##*/};
-		awk '$4~/\.1$/' $f > $tmpd/a
-		if [ -s $tmpd/a ];then	
-			sort -k1,1 -k2,3n $tmpd/a \
-			| mergeBed -i stdin -s -c 5,6 -o count,distinct -d $2 \
-			| awk -v OFS="\t" '{ print $1,$2,$3,$1","$2","$3","$5,$4,$5;}' >> $3;
-		fi
+		#echo "$f";
+		cat $f | awk -v OFS=";" '{ split($4,a,"."); 
+			n=1;b="u";
+			if (a[2] > 1){ b="m"; n= 1/a[2]; }
+			print $1,$2,$3,b,$6"\t"n;
+		}' | stat.sum - | tr ";" "\t" \
+		| awk -v OFS="\t" '{ print $1,$2,$3,$4,$6,$5;}'
 	done
-	rm -rf $tmpd;
+}
+pa.cluster_sb(){ 
+usage="
+USAGE: $FUNCNAME <bed> <maxd> 
+	<maxd> : maximum distance between features to be merged 
+"; if [ $# -lt 2 ]; then echo "$usage"; return; fi
+
+	sort -k1,1 -k2,3n $1 \
+	| mergeBed -i stdin -s -c 5,6 -o sum,distinct -d $2 \
+	| awk -v OFS="\t" -v D=$2 '{ print $1,$2,$3,"c"NR,$4,$5;}' 
+}
+
+pa.preptest(){
+usage="
+FUNCT: make a table for tests 
+USAGE: $FUNCNAME <gene.bed> <trt.bed> <ctr.bed> 
+"; if [ $# -lt 3 ]; then echo "$ussage"; return; fi
+local D=${3:-10};
+	intersectBed -a $1 -b $2 -wa -wb -s \
+	| perl -ne 'chomp; my @a=split/\t/,$_; my $s=$a[10]; $a[10]=0;
+		print join(";",@a[0..5]),"\t",join(";",@a[6..11]),"\t",$s,"\n"' \
+	| stat.gix2gixnx - \
+	| awk -v OFS="\t" '{ print $1"@"$2,$3,$4;}' \
+	> tmp.a
+
+	intersectBed -a $1 -b $3 -wa -wb -s \
+	| perl -ne 'chomp; my @a=split/\t/,$_; my $s=$a[10]; $a[10]=0;
+		print join(";",@a[0..5]),"\t",join(";",@a[6..11]),"\t",$s,"\n"' \
+	| stat.gix2gixnx - \
+	| awk -v OFS="\t" '{ print $1"@"$2,$3,$4;}' \
+	> tmp.b
+	stat.prep tmp.a tmp.b
+}
+
+pa.comp_pcpa(){
+usage="
+FUNCT: relative FC  
+USAGE: $FUNCNAME <gene.bed> <3utr> <trt.bed> <ctr.bed> <s> <log2fc>
+"; if [ $# -lt 6 ]; then echo "$usage"; return; fi
+
+	echo "gene@cluster trt.count trt.other ctr.count ctr.other FC sign" | tr " " "\t"
+	pa.preptest $1 $3 $4 \
+	| perl -ne 'chomp; my @a=split/\t/,$_;
+		my ($g,$p) = split /@/,$a[0];	
+		$p=~s/;/\t/g;
+		print $p,"\t",join("\|",@a),"\n";
+	'| tail -n+2 | intersectBed -a stdin -b $2 -wa -v -s | cut -f7- | tr "|" "\t" \
+        | awk -v OFS="\t" -v S=$5 -v FC=$6 '{
+                e="U"; eps=1; s=$2+$3;
+                fc=($2+eps)*($3+$5+eps)/($2+$4+eps)/($3+eps);
+                if( s>=S){
+                        if(fc >= FC){ e="P";}
+                        else if(fc <= 1/FC){ e="N";}
+                }else{ e="I";}
+                print $0,fc,e;
+        }'
 }
 
 pa.score(){
@@ -67,44 +145,7 @@ USAGE: $FUNCNAME <bed> <method>
 	}' $1 | stat.sum - | tr ";" "\t" | awk -v OFS="\t" '{ print $1,$2,$2+1,".",$4,$3; }'
 }
 
-pa.filter(){ 
-usage="
-FUNCT: Filter inter-priming artefacts 
-USAGE: $FUNCNAME <bed> <fasta>
-REFER: heppard, S., Lawson, N.D. & Zhu, L.J., 2013.Bioinformatics (Oxford, England), 29(20), pp.2564–2571.
-"
-	if [ $# -ne 2 ]; then echo "$usage"; return; fi
 
-	bed.flank $1 39 30 -s  | seq.read $2 - -s \
-	| perl -ne 'chomp; my @a=split/\t/,$_; print join(";",@a[0..($#a-1)]),"\t",$a[$#a],"\n"' \
-	| eval "$FILTER predict - $FILTER_M" \
-	| perl -ne 'chomp; my ($bed,$seq,$pos,$score)=split/\t/,$_;
-		my @a=split /;/,$bed;
-		my $len=$a[2]-$a[1];
-		my @p=split /,/,$pos;
-		my @s=split /,/,$score;
-		for(my $i=0; $i<=$#p;$i++){
-			my $this_s=sprintf("%.3f",$s[$i]); 
-			my $this_p=$p[$i];
-			if ($#a > 4 && $a[5] eq "-"){
-				$this_p=$len-$this_p-1;
-			}
-			print join("\t",($a[0],$a[1]+$this_p,$a[1]+$this_p+1,$a[3],$a[4],$a[5],$this_s)),"\n";
-		}
-	'
-}
-
-
-pa.cluster_sb(){ 
-usage="
-USAGE: $FUNCNAME <bed> <maxd>
-	<maxd> : maximum distance between features to be merged 
-"; if [ $# -ne 2 ]; then echo "$usage"; return; fi
-
-	sort -k1,1 -k2,3n $1 \
-	| mergeBed -i stdin -s -c 5,6 -o sum,distinct -d $2 \
-	| awk -v OFS="\t" -v D=$2 '{ print $1,$2,$3,"SB"D"_"NR,$4,$5;}' 
-}
 
 pa_test_pcpa_vs_pa(){
 usage="

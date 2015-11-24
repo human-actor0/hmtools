@@ -62,6 +62,82 @@ c	3	30	33	30	33	30" > exp
 	check exp obs
 	rm -rf trt1 trt2 ctr1 exp obs
 }
+stat.gix2gixnx(){
+usage="
+FUNCT: Group, Id, Count to Group Id Count GroupCount - Count
+USAGE: $FUNCTNAME <file>
+"
+cat $1 | perl -e 'use strict;
+        my %d=(); my %dt=();
+        while(<STDIN>){ chomp;
+                my ($g,$i,@x) = split /\t/,$_;
+		if( !defined $d{$g} ){
+			@{$d{$g}}=();
+			@{$dt{$g}}=();
+		}
+                push @{$d{$g}}, [$g, $i, @x];
+		for( my $i=0; $i < scalar @x; $i++){
+			$dt{$g}[$i] += $x[$i];
+		}
+        }
+        foreach my $g (keys %d){
+	foreach my $ae (@{$d{$g}}){
+		my @b=@{$dt{$g}};
+		my @a=@$ae;
+		for(my $i=0; $i <= $#b; $i++){
+			$b[$i] -= $a[$i+2];
+		}
+		print join("\t",@a),"\t",join("\t",@b),"\n";
+        }}
+'
+}
+stat.gix2gixnx.test(){
+echo \
+"g1	1	1	11
+g1	2	2	22
+g2	3	3	33" \
+| stat.gix2gixnx - > obs
+echo \
+"g2	3	3	33	0	0
+g1	1	1	11	2	22
+g1	2	2	22	1	11" > exp
+check obs exp
+rm -rf obs exp
+}
+
+stat.de(){
+	data=`echo "$@" | quote`;
+	cmd='files=c('"$data"');
+		d=NULL;
+		for( f in files ){
+			tt=read.table(f,header=F,stringsAsFactors=F);
+			colnames(tt)=c("id",paste("DE.",f,sep=""), paste("X.",f,sep=""));
+
+			if(is.null(d)){ d=tt;
+			}else{ d=merge(d,tt,by=c(1),all=T); }
+		}
+		colnames(d)=gsub("tmpd\\/","",colnames(d));
+		d1=d[,grep("DE.",colnames(d))]; d1[ is.na(d1) ] = "I";
+		d2=d[,grep("X.",colnames(d))];
+
+		write.table(cbind(d$id,d1,d2),file="stdout",col.names=T,row.names=F,quote=F,sep="\t");
+		cb=t(combn(2:ncol(tt),2));
+
+	'
+	run_R "$cmd" 
+}
+stat.de.test(){
+echo \
+"a	U	0
+b	P	2
+c	N	0.5" > a
+echo \
+"a	P	4
+b	P	4" > b
+stat.de a b
+}
+
+
 add(){
 	perl -e 'use strict; my %res=();
 	foreach my $f (@ARGV){

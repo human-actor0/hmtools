@@ -15,6 +15,17 @@ mycat(){
         fi
 }
 
+swapcol(){
+	awk -v I=$2 -v J=$3 -v OFS="\t" '{
+		a=$(I); $(I)=$(J);$(J)=a;	
+	}1'
+}
+swapcol.test(){
+echo \
+"a	b	c
+d	e	f" | swap_columns - 2 3
+}
+
 check(){ ## obtained from bamtools test
 	if diff $1 $2; then
 		echo ok
