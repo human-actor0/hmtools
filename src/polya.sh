@@ -14,12 +14,14 @@ BW=$HMHOME/bin/bedGraphToBigWig
 
 pa.read(){
 usage=" 
-FUNCT : find cleavage points from the reads in a bam file 
-USAGE : $FUNCNAME <bam> <odir>
+FUNCT : find cleavage points split reads into unique and multiple hits 
+USAGE : $FUNCNAME <bam> <odir> [<Q>]
+ [<Q>] : MAPQ threshold (default 10);
 "
-if [ $# -ne 2 ];then echo "$usage"; return; fi
-	samtools view -bq 1 $1 | bamToBed -split \
-        | bed.n2i - | bed.3p - | bed.ss - | bed.split - $2
+if [ $# -lt 2 ];then echo "$usage"; return; fi
+local Q=${3:-10};
+	samtools view -bq $Q $1 | bamToBed -split \
+        | bed.n2i - | bed.ss - | bed.3p - | bed.split - $2
 }
 pa.filter(){ 
 usage="
@@ -49,7 +51,7 @@ REFER: heppard, S., Lawson, N.D. & Zhu, L.J., 2013.Bioinformatics (Oxford, Engla
 }
 pa.point(){
 usage="
-FUNCT: collect proximal points 
+FUNCT: summarize scores of unique/multihit points 
 USAGE: $FUNCNAME <reads_dir>
 "; if [ $# -ne 1 ]; then echo "$usage"; return; fi
 	for f in $1/*;do 
@@ -67,10 +69,15 @@ usage="
 USAGE: $FUNCNAME <bed> <maxd> 
 	<maxd> : maximum distance between features to be merged 
 "; if [ $# -lt 2 ]; then echo "$usage"; return; fi
-
-	sort -k1,1 -k2,3n $1 \
-	| mergeBed -i stdin -s -c 5,6 -o sum,distinct -d $2 \
-	| awk -v OFS="\t" -v D=$2 '{ print $1,$2,$3,"c"NR,$4,$5;}' 
+## mergeBed version issue 
+	local tmpd=`mymktempd`;
+	bed.split $1 $tmpd
+	for f in $tmpd/*;do
+		sort -k1,1 -k2,3n $f \
+		| mergeBed -i stdin -s -c 5 -o sum -d $2 \
+		| awk -v OFS="\t" -v D=$2 '{ print $1,$2,$3,$1"."NR,$5,$4;}' 
+	done
+	rm -rf tmpd;
 }
 
 pa.preptest(){
@@ -79,20 +86,22 @@ FUNCT: make a table for tests
 USAGE: $FUNCNAME <gene.bed> <trt.bed> <ctr.bed> 
 "; if [ $# -lt 3 ]; then echo "$ussage"; return; fi
 local D=${3:-10};
+	local tmpd=`mymktempd`;
 	intersectBed -a $1 -b $2 -wa -wb -s \
 	| perl -ne 'chomp; my @a=split/\t/,$_; my $s=$a[10]; $a[10]=0;
 		print join(";",@a[0..5]),"\t",join(";",@a[6..11]),"\t",$s,"\n"' \
 	| stat.gix2gixnx - \
 	| awk -v OFS="\t" '{ print $1"@"$2,$3,$4;}' \
-	> tmp.a
+	> $tmpd/a
 
 	intersectBed -a $1 -b $3 -wa -wb -s \
 	| perl -ne 'chomp; my @a=split/\t/,$_; my $s=$a[10]; $a[10]=0;
 		print join(";",@a[0..5]),"\t",join(";",@a[6..11]),"\t",$s,"\n"' \
 	| stat.gix2gixnx - \
 	| awk -v OFS="\t" '{ print $1"@"$2,$3,$4;}' \
-	> tmp.b
-	stat.prep tmp.a tmp.b
+	> $tmpd/b
+	stat.prep $tmpd/a $tmpd/b
+	rm -rf $tmpd
 }
 
 pa.comp_pcpa(){

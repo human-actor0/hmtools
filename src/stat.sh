@@ -13,11 +13,12 @@ stat.sum(){
 stat.prep(){
 usage="
 FUNCT: make a merged table with headers 
-USAGE: $FUNCNAME <trt1>[,<trt2 ..]  <ctr1>[,<ctr2..]
-"; if [ $# -ne 2 ];then echo "$usage"; return; fi
+USAGE: $FUNCNAME <trt1>[,<trt2 ..]  <ctr1>[,<ctr2..] [log]
+"; if [ $# -lt 2 ];then echo "$usage"; return; fi
 
         trt=`echo $1 | tr "," " " | quote -`;
         ctr=`echo $2 | tr "," " " | quote -`;
+	
         run_R '
                 trt=c('$trt'); ctr=c('$ctr');
                 d=NULL;
@@ -35,7 +36,7 @@ USAGE: $FUNCNAME <trt1>[,<trt2 ..]  <ctr1>[,<ctr2..]
                 }
 		d[ is.na(d) ] = 0;
 		write.table(file="stdout",d, col.names=T,quote=F,sep="\t", row.names=F);
-        ' 
+        ' ${3:-""} 
 }
 
 stat.prep.test(){
