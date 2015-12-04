@@ -5,9 +5,12 @@
 seq.read(){
 usage="
 USAGE: $FUNCNAME <fa> <bed> [options]
- [options]: -s : reverse complements for the negative strand
+ [options]: 
+	-s : reverse complements for the negative strand
+	-i : ignore case 
+
 "
-local option=${3:-""};
+local option=${@:3};
 if [ $# -lt 2 ]; then echo "$usage"; return; fi
 	local tmpd=`mymktempd`;
 	mycat $2 > $tmpd/a;	
@@ -18,7 +21,7 @@ if [ $# -lt 2 ]; then echo "$usage"; return; fi
 			return join("",reverse(split //,$seq));
 		}
 
-		my $file="'$tmpd/a'"; my $opt="'$option'";
+		my $file="'$tmpd/a'"; my $opt="'"$option"'";
 		my %ref=(); my $chrom="";
 		while(<STDIN>){ chomp;
 			if($_=~/>(\S+)/){ $chrom=$1; next; }		
@@ -31,16 +34,23 @@ if [ $# -lt 2 ]; then echo "$usage"; return; fi
 			my $seq="NULL";
 			if(defined $ref{$a[0]}){
 				$seq=substr($ref{$a[0]},$a[1],$a[2]-$a[1]);
-				if($opt eq "-s"){
+				if($opt =~ /s/ && $#a >=5 && $a[5] eq "-"){
 					$seq=revc($seq);
 				}
 			}
+			if($opt=~/lc/){ $seq = lc $seq; }elsif ($opt=~/uc/){ $seq = uc $seq; }
 			print join("\t",@a),"\t",$seq,"\n";
 		}
 		close($fh);
 		
 	'
 	rm -rf $tmpd;
+}
+seq.read.test(){
+echo	"chr22	17265299	17265350	ENSG00000172967	0	-
+chr22	17280914	17280954	ENSG00000172967	0	-
+chr2	217280752	217280979	ENSG00000138375	0	+" \
+| seq.read $HMHOME/data/hg19_chr22.fa.gz - -s -lc
 }
 
 kmers(){

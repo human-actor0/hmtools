@@ -64,6 +64,8 @@ rm -rf a b
 
 
 bed.n2i(){
+usage="$FUNCNAME <bed>" 
+if [ $# -ne 1 ];then echo "$usage";return; fi
 	local tmpd=`mymktempd`;
 	#local tmpd=tmpd; mkdir -p tmpd;
 	cat $1 | perl -e 'use strict; 
@@ -81,7 +83,7 @@ bed.n2i(){
 				$ref{$a[3]}{id} = $id;
 			}
 			$a[3]=$ref{$a[3]}{id};
-			print $a[3],"\t",join ("\t",@a),"\n";
+			print $a[3],"\t",join (";",@a),"\n";
 		}
 		
 		open(my $fh, ">",$fileb) or die "cannot open $fileb: $!";	
@@ -89,10 +91,10 @@ bed.n2i(){
 			print $fh $ref{$k}{id},"\t",$ref{$k}{n},"\n";	
 		}
 		close($fh);
-	' | sort -k1,1 > $tmpd/a
+	' | sort -k1,1n > $tmpd/a
 
-	sort -k1,1 $tmpd/b | join $tmpd/a - \
-	| perl -ne 'chomp; my @a=split/\s/,$_; 
+	sort -k1,1n $tmpd/b | join -j 1 $tmpd/a - \
+	| tr ";" "\t" | perl -ne 'chomp; my @a=split/\s/,$_; 
 		$a[4] .= ".".$a[$#a];
 		print join("\t",@a[1..($#a-1)]),"\n";
 	'
@@ -124,73 +126,143 @@ local OPT=${3:-""};
 		my $MAXITER='$MAXITER';
 		my $DELTA='$DELTA';
 
-		my %G=(); # gene id
-		my %R=(); # read id
-
 		my %E=(); # relative,normalized gene expression frequency
 		my %A=(); # a fraction of a read attributed to a gene 
-		my %B=(); # helper
 		my %L=(); # gene lengths
+		my $Lread=0; my $Ltot=0;
 		my $TOT=0; # total weighted reads
 		my $s=0;
-		my $gid=0; my $rid=0;
+
+		sub ss{ ## root sum of squares
+			my ($h1, $h2)=@_;
+			my $s=0;
+			foreach my $k (keys %$h1){
+			if( defined $h2->{$k} ){
+				$s += $h1->{$k} * $h2->{$k};
+			}}	
+			return $s;
+		}
+		sub min{
+			my ($x,$y)=@_;
+			if($x > $y){ return( $y);}
+			return $x;
+		}
+		sub max{
+			my ($x,$y)=@_;
+			if($x > $y){ return( $x);}
+			return $y;
+		}
+
+		sub normE{
+			my ($E, $L, $Lread) = @_;
+			## normalize by effective gene lengths
+			my $s=0;
+			foreach my $g (keys %$E){
+				my $len = $L->{$g} - $Lread + 1;
+				if($len >0){ $E->{$g} /= $len;
+				}else{ $E->{$g} = 0;}
+				$s += $E->{$g};
+			}
+			## normalize gene expressions
+			foreach my $g (keys %$E){ $E->{$g} /= $s;}
+		}
+		sub estE{
+			my ($Ein, $A,      $Eout) = @_;
+			## I do not think of separating uniq and multi reads
+			foreach my $r (keys %$A){
+				my $s=0; my $norm=0;
+				foreach my $g (keys %{$A->{$r}}){ $s += $Ein->{$g}; }	
+				if($s > 0){ $norm = 1/$s; }
+				foreach my $g (keys %{$A->{$r}}){
+					$Eout->{$g} += $Ein->{$g} * $norm;
+				}
+			}
+		}
+		sub update{
+			my ($Ein, $A,$L,$Lread,     $Eout) = @_;
+
+			## estimate expression by reads
+			estE( $Ein, $A, $Eout);
+			normE( $Eout, $L, $Lread);
+		}
+
+		my $minStep0 = 1.0;
+		my $minStep = 1.0;
+		my $maxStep0 = 1.0;
+		my $maxStep = 1.0;
+		my $mStep = 4.0;
+		my $OPT_TOL=0.01;
+
+
 		while(<STDIN>){chomp;
-			my ($chr,$start,$end,$gene,$score,$strand, $chr2,$start1,$end1,$read,$score1,$strand1)=split /\t/,$_;
-			if(defined $G{$gene}){ $gid=$G{$gene}; }else{ $gid++; $G{$gene}=$gid; }
-			if(defined $R{$read}){ $rid=$R{$read}; }else{ $rid++; $R{$read}=$rid; }
-			
+			my ($chr,$start,$end,$gid,$score,$strand, $chr2,$start1,$end1,$rid,$score1,$strand1)=split /\t/,$_;
+			$Lread += $end1-$start1; $Ltot ++; 
 			$L{$gid}=$end-$start;
 			$A{$rid}{$gid} = $score1;
-			$B{$gid}{$rid} = $score1;
 			$E{$gid} = 0;
 		}
-		## weight 1/n for multi-reads
+
+		## estimated read length	
+		$Lread /= $Ltot;
+
+		## init with 1/n weighted read counts 
 		foreach my $r (keys %A){
 			my $n=scalar keys %{$A{$r}};
-			foreach my $g (keys %{$A{$r}}){
-				$A{$r}{$g} /= $n;	
-				$TOT += $A{$r}{$g};
-			}
+			foreach my $g (keys %{$A{$r}}){ $E{$g} += 1/$n; }
 		}
-		my %E1=(); # copy of the previous E
+		normE(\%E,\%L,$Lread);
+		my %E1=(); 
+		my %E2=(); 
+		my %Eprime=();
+		my $Eres = "";
+		my %r=(); my %r2=(); my %v=();
 		foreach my $iter ( 1..$MAXITER){
-			## update E
-			$s=0;
-			foreach my $g (keys %B){
-				$E1{$g}=$E{$g}; ## backup
-				my $s2=0;
-				foreach my $r (keys %{$B{$g}}){
-					$s2 += $A{$r}{$g};	
-				}
-				$E{$g}=$s2/$L{$g};
-				$s += $E{$g};
+			print "ITER--$iter: \n";
+			update(\%E,\%A,\%L,$Lread,\%E1);
+			update(\%E1,\%A,\%L,$Lread,\%E2);
+
+			foreach my $g ( keys %E){
+				$r{$g} = $E1{$g} - $E{$g};
+				$r2{$g} = $E2{$g} - $E1{$g};
+				$v{$g} = ($E2{$g} - $E1{$g})-$r{$g};
 			}
-			foreach my $k (keys %E){ $E{$k} /= $s; }
+			my $rNorm = sqrt(ss( \%r,\%r));
+			my $r2Norm = sqrt(ss( \%r2,\%r2));
+			my $vNorm = sqrt(ss( \%v,\%v));
+			my $rvNorm = sqrt(abs(ss(\%r,\%v)));
+			if ( $vNorm == 0 ){
+				print {*STDERR}	"$rNorm,$r2Norm,$vNorm, vnorm == 0\n"; last;	
+			}
+			my $alphaS=$rNorm/$rvNorm;
+			my $alphaS=max($minStep, min($maxStep,$alphaS));
 
-			## update A : for each read calculate relative contributions to its target genes
-			foreach my $r (keys %A){
-				$s=0;
-				foreach my $g (keys %{$A{$r}}){
-					$A{$r}{$g}=$E{$g};
-					$s += $E{$g};
-				}
-				foreach my $g (keys %{$A{$r}}){
-					$A{$r}{$g} = $E{$g}/$s;
+			if ( $rNorm < $OPT_TOL ){
+				print {*STDERR} "rNorm=$rNorm \n"; last;
+			}
+			if ( $r2Norm < $OPT_TOL ){
+				print {*STDERR} "r2Norm=$r2Norm \n"; last;
+				$Eres = \%E2;
+			}
+		
+			## extraplate 
+			foreach my $g (keys %E){
+				$Eprime{$g} = max(0.0, $E{$g} + 2 * $alphaS * $r{$g} + ($alphaS*$alphaS)*$v{$g});
+			}	
+			update(\%Eprime,\%A,\%L,$Lread,\%E);
+
+			## stabilization
+			if (abs( $alphaS - 1.0 ) > 0.01 ){
+				print {*STDERR} "stablizaation step:\n";
+				if ($alphaS == $maxStep){ 
+					$maxStep=max($maxStep0, $maxStep/$mStep);
+					$alphaS = 1.0;
 				}
 			}
+			if ($alphaS == $maxStep){ $maxStep = $mStep * $maxStep;}
+			if ($minStep < 0 && $alphaS == $minStep ){ $minStep = $mStep * $minStep;}
+			print "alpha=$alphaS\n";
 
-
-			my $d=0;
-			foreach my $k (keys %E){ $d += abs($E{$k} -$E1{$k});} 
-			$d /= scalar keys %E;
-			#print "ITER--$iter: $d\n";
-			#foreach my $k (keys %E){ print $k," ",$E{$k},"\n"; }
-			if($d <= $DELTA ){ last; }
 		}
-		foreach my $g (keys %G){
-			print $g,"\t",$E{ $G{$g} }* $TOT,"\n";
-		}
-		#foreach my $r (keys %A){ foreach my $g (keys %{$A{$r}}){ print $r,"\t",$g,"\t",$A{$r}{$g},"\n"; }}
 	'
 }
 bed.mhits.test(){
@@ -479,7 +551,6 @@ bed12_to_exon(){
 		}
 	}' $1 
 }
-
 bed12_to_intron(){
 	##  [es   ]s----e[    ee]
 	awk -v OFS="\t" '$10 > 1{
@@ -493,7 +564,10 @@ bed12_to_intron(){
 			#ls = $2 + starts[i-1]; le = ls + sizes[i-1]; rs = $2 + starts[i]; re = rs + sizes[i];
 			print $1,s,e,$4,$5,$6;
 		}	
-	}' $1 
+	}' $1 | sort -u
+}
+bed.intron(){
+	bed12_to_intron $1
 }
 
 bed_flat(){ 
