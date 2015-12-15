@@ -1,10 +1,40 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
 . $HMHOME/src/stat.sh
-
-bed.nf(){
-	head -n 1 $1 | awk '{print NF;}'
+bed.sort(){
+ 	sort -i -k 1,1 -k 2n,2 $1 
 }
+bed.merge(){
+## -s option performs differently in different versions
+usage="$FUNCNAME <bed> [mergeBed options]
+"
+if [ $# -lt 1 ];then echo "$usage"; return; fi
+	local opts=${@:2};
+	local opts_s="";
+	if [ -z ${opts##*\-s*} ];then 
+		opts_s=1; 
+		opts=${opts/\-s/};
+	fi
+	if [ -z $opts_s ];then
+		cat $1 | mergeBed -i stdin $opts 
+	else
+		awk -v OFS="\t" '{ $1=$1","$6;print $0;}' $1 | mergeBed -i stdin $opts \
+		| awk -v OFS="\t" '{ split($1,a,","); $1=a[1]; $3=$3"\t"a[2]; print $0;}' 
+	fi
+}
+bed.merge.test(){
+echo \
+"c	1	2	n	0	+
+c	2	3	n	0	+
+c	2	4	n	0	-" \
+| bed.sort - | bed.merge - -c 4,5 -o distinct,sum -s > obs
+echo \
+"c	1	3	+	n	0
+c	2	4	-	n	0" > exp
+check obs exp
+
+}
+
 bed.split(){
 usage="
 USAGE: $FUNCNAME <bed> <outdir>
@@ -15,6 +45,31 @@ USAGE: $FUNCNAME <bed> <outdir>
 		print $0 >> fout;
 	}' $1
 }
+
+bed.nf(){
+	head -n 1 $1 | awk '{print NF;}'
+}
+
+bed.eachchrom(){
+usage="
+USAGE: $FUNCNAME <bed> '<functions>'
+"; if [ $# -ne 2 ];then echo "$usage"; return; fi
+	local tmpd=`mymktempd`;
+	bed.split $1 $tmpd;
+	for f in $tmpd/*;do
+		cat $f | eval "$2";	
+	done
+	rm -rf $tmpd
+}
+bed.eachchrom.test(){
+echo \
+"c1	11	22	n	0 	+
+c1	3	4	n	0 	+
+c2	1	2	n	0 	+" | bed.eachchrom - 'sort -k1,1 -k2,2n'
+
+}
+
+
 bed.count(){
 usage="
 usage: $FUNCNAME <target> <read>  [options]
@@ -22,11 +77,14 @@ output: target + sum of read scores
  [options]: 
 	-s : count on the same strand
 	-S : count on the opposite strand
+	-a : report all target and put zero counts
 "
 	local opt_strand="";
+	local opt_all="";
 	for opt in $@;do
 		if [ $opt = "-s" ];then opt_strand="-s";
 		elif [ $opt = "-S" ];then opt_strand="-S";
+		elif [ $opt = "-a" ];then opt_all="-a";
 		fi
 	done
 	if [ $# -lt 2 ];then echo "$usage"; return; fi
@@ -35,16 +93,22 @@ output: target + sum of read scores
 	local tmpd=`mymktempd`;
 	mycat $1 | bed.split - $tmpd/a
 	mycat $2 | bed.split - $tmpd/b
-	local nf="";
 	for f in $tmpd/a/*;do
 		c=${f##*/};
 		if [ -f $tmpd/b/$c ];then
-			if [ -z $nf ];then nf=`bed.nf $f`; fi 
+			local nf=`bed.nf $f`; 
 			intersectBed -a $f -b $tmpd/b/$c -wa -wb $opt_strand  \
 			| awk -v nf=$nf -v OFS="\t" '{ 
 				for(i=2; i<=nf;i++){ $1=$1";"$(i); }
 				print $1,$(nf+5);
 			}' | stat.sum - | tr ";" "\t" 
+
+			if [ ! -z $opt_all ];then
+				intersectBed -a $f -b $tmpd/b/$c -v -s  \
+				| awk -v OFS="\t" '{ print $0,0;}'
+			fi
+		elif [ ! -z $opt_all ];then
+			awk -v OFS="\t" '{ print $0,0;}'
 		fi
 	done
 	rm -rf $tmpd
@@ -52,14 +116,58 @@ output: target + sum of read scores
 bed.count.test(){
 echo \
 'chr	1	100	n1	0	+
-chr	50	200	n2	0	-'> a
+chr	50	200	n2	0	-
+chr	1000	2000	n3	0	+'> a
 echo \
 'chr	1	10	r1	1	+
 chr	40	50	r2	2	+
 chr	50	200	r3	3	+' > b
 
-bed.count a b -S 
+bed.count a b -s -a 
 rm -rf a b 
+}
+
+bed.mcount(){
+usage="
+FUNCT: make a merged bed and then recount 
+USAGE: $FUNCNAME [options] <bed> [<bed>,...] 
+ [options]:
+	-d <int> : maximum distance to be merged
+"
+	OPTIND=0;
+	opt="-d 0";
+	while getopts ":d:h" arg; do
+		case $arg in 
+			d) opt="-d $OPTARG";;
+			h) echo "$usage";return;;
+		esac
+	done
+	shift $(( OPTIND - 1))
+	if [ $# -lt 1 ];then echo "$usage"; return; fi
+	local tmpd=`mymktempd`;
+	cat "$@" | bed.sort - | mergeBed -i stdin -s $opt \
+	| awk -v OFS="\t" '{ $4=".\t0\t"$4; print $0;}' > $tmpd/a
+	for f in ${@};do
+		bed.count $tmpd/a $f -s > $tmpd/b
+		mv $tmpd/b $tmpd/a
+	done
+	cat $tmpd/a
+	rm -rf $tmpd;
+}
+bed.mcount.test(){
+echo  \
+"c	1	2	n	1	+
+c	4	5	n	2	+" > tmp.a
+echo  \
+"c	1	2	n	11	+
+c	2	3	n	22	+
+c	4	6	n	33	+" > tmp.b
+bed.mcount -d 0 tmp.a tmp.b > obs 
+echo \
+"c	1	3	.	0	+	1	33
+c	4	6	.	0	+	2	33" > exp
+check exp obs
+rm tmp.a tmp.b exp obs
 }
 
 

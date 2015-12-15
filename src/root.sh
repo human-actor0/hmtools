@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 mycat(){
 	if [[ -d $1 ]];then
 		cat ${1%/}/*;
@@ -17,8 +16,10 @@ mycat(){
 
 swapcol(){
 	awk -v I=$2 -v J=$3 -v OFS="\t" '{
+		if(J < 0){ J=NF+J+1;}
 		a=$(I); $(I)=$(J);$(J)=a;	
-	}1'
+		print $0;
+	}' $1;
 }
 swapcol.test(){
 echo \

@@ -15,13 +15,14 @@ BW=$HMHOME/bin/bedGraphToBigWig
 pa.read(){
 usage=" 
 FUNCT : find cleavage points split reads into unique and multiple hits 
-USAGE : $FUNCNAME <bam> <odir> [<Q>]
+USAGE : $FUNCNAME <bam> [<Q>]
  [<Q>] : MAPQ threshold (default 10);
 "
 if [ $# -lt 2 ];then echo "$usage"; return; fi
 local Q=${3:-10};
 	samtools view -bq $Q $1 | bamToBed -split \
-        | bed.n2i - | bed.ss - | bed.3p - | bed.split - $2
+        | bed.n2i - 
+
 }
 pa.filter(){ 
 usage="
@@ -52,17 +53,30 @@ REFER: heppard, S., Lawson, N.D. & Zhu, L.J., 2013.Bioinformatics (Oxford, Engla
 pa.point(){
 usage="
 FUNCT: summarize scores of unique/multihit points 
-USAGE: $FUNCNAME <reads_dir>
-"; if [ $# -ne 1 ]; then echo "$usage"; return; fi
-	for f in $1/*;do 
-		#echo "$f";
-		cat $f | awk -v OFS=";" '{ split($4,a,"."); 
-			n=1;b="u";
-			if (a[2] > 1){ b="m"; n= 1/a[2]; }
-			print $1,$2,$3,b,$6"\t"n;
-		}' | stat.sum - | tr ";" "\t" \
-		| awk -v OFS="\t" '{ print $1,$2,$3,$4,$6,$5;}'
+USAGE: $FUNCNAME <read.bed> [options]
+ [options]:
+	-u : uniq read only
+"; if [ $# -lt 1 ]; then echo "$usage"; return; fi
+	local tmp="cat $1 ";
+	while getopts "uqn" opt "${@:2}"; do
+		case $opt in
+		 u) tmp="$tmp | awk '\$4~/\.1/'  ";;
+		esac	
 	done
+	echo "$tmp";
+	eval "$tmp" | bed.ss - | bed.3p - \
+	| awk -v OFS=";" '{ 
+		split($4,a,".");
+		s=0;if(a[2] > 0){ s=1/a[2];}
+		print $1,$2,$3,".",$6"\t"s; 
+	}' | stat.sum - | tr ";" "\t" | swapcol - 5 6 
+}
+
+pa.point.test(){
+echo \
+"c	1	2	0.2	1	+
+c	1	2	0.2	10	+
+c	2	3	1.1	255	+" | pa.point - -n
 }
 pa.cluster_sb(){ 
 usage="
@@ -74,11 +88,29 @@ USAGE: $FUNCNAME <bed> <maxd>
 	bed.split $1 $tmpd
 	for f in $tmpd/*;do
 		sort -k1,1 -k2,3n $f \
-		| mergeBed -i stdin -s -c 5 -o sum -d $2 \
-		| awk -v OFS="\t" -v D=$2 '{ print $1,$2,$3,$1"."NR,$5,$4;}' 
+		| mergeBed -i stdin -s -c 2,5 -o collapse,collapse -d $2 \
+		| perl -ne 'chomp; my @a=split/\t/,$_;
+			my @x=split/,/,$a[4];
+			my @y=split/,/,$a[5];
+			my $n=0; my $s=0; my $p=0;
+			for(my $i=0; $i <= $#x; $i++){
+				$n++; $s+=$y[$i]; $p+=$y[$i]*$x[$i];
+			}
+			my $center=int( $p/$s + 0.5);
+			my $score=sprintf("%.2f",$s);
+			print $a[0],"\t",$a[1],"\t",$a[2],"\t",$center,"\t",$score,"\t",$a[3],"\n";
+		'
 	done
 	rm -rf tmpd;
 }
+pa.cluster_sb.test(){
+echo \
+"c	10	11	r1	1	+
+c	12	13	r2	2	+
+c	13	14	r3	3	+
+c	6	7	r4	0.01	+" | pa.cluster_sb - 1 
+}
+
 
 pa.preptest(){
 usage="
@@ -87,21 +119,57 @@ USAGE: $FUNCNAME <gene.bed> <trt.bed> <ctr.bed>
 "; if [ $# -lt 3 ]; then echo "$ussage"; return; fi
 local D=${3:-10};
 	local tmpd=`mymktempd`;
-	intersectBed -a $1 -b $2 -wa -wb -s \
-	| perl -ne 'chomp; my @a=split/\t/,$_; my $s=$a[10]; $a[10]=0;
-		print join(";",@a[0..5]),"\t",join(";",@a[6..11]),"\t",$s,"\n"' \
-	| stat.gix2gixnx - \
-	| awk -v OFS="\t" '{ print $1"@"$2,$3,$4;}' \
-	> $tmpd/a
-
-	intersectBed -a $1 -b $3 -wa -wb -s \
-	| perl -ne 'chomp; my @a=split/\t/,$_; my $s=$a[10]; $a[10]=0;
-		print join(";",@a[0..5]),"\t",join(";",@a[6..11]),"\t",$s,"\n"' \
-	| stat.gix2gixnx - \
-	| awk -v OFS="\t" '{ print $1"@"$2,$3,$4;}' \
-	> $tmpd/b
-	stat.prep $tmpd/a $tmpd/b
+	bed.mcount -d -1 $2 $3 | intersectBed -a $1 -b stdin -wa -wb -s \
+	| perl -ne 'chomp; my @a=split/\t/,$_;
+		print join(";",@a[0..5]),"\t",join(";",@a[6..11]),"\t",join("\t",@a[12..13]),"\n"' \
+	| stat.gix2gixnx - > $tmpd/a  
+	awk -v OFS="\t" '{ print $1"@"$2,$3,$5;}' $tmpd/a > $tmpd/b
+	awk -v OFS="\t" '{ print $1"@"$2,$4,$6;}' $tmpd/a > $tmpd/c
+	stat.prep $tmpd/b $tmpd/c
 	rm -rf $tmpd
+}
+
+
+pa.pcpa_proportion(){
+usage="
+FUNCT: make a table of pcpa pa counts 
+USAGE: $FUNCNAME <gene.bed> <3utr> <trt.bed> <ctr.bed> 
+"; if [ $# -lt 4 ]; then echo "$usage"; return; fi
+	local tmpd=`mymktempd`;
+	#local tmpd=tmpd; mkdir -p $tmpd;
+
+	intersectBed -a $3 -b $2 -s -v | bed.count $1 - -s > $tmpd/a1
+	intersectBed -a $3 -b $2 -s -u | bed.count $1 - -s > $tmpd/a2
+	intersectBed -a $4 -b $2 -s -v | bed.count $1 - -s > $tmpd/a3
+	intersectBed -a $4 -b $2 -s -u | bed.count $1 - -s > $tmpd/a4
+
+	f=( $tmpd/a* );f=( ${f[@]/%/\"} );f=( ${f[@]/#/\"} );
+	f=`echo "${f[@]}" | tr " " ",";`
+
+	echo "gene trt.pcpa trt.pa ctr.pcpa ctr.pa" | tr " " "\t"
+	perl -e 'use strict; my @f=('$f'); 
+		my $k=0; my %res=();
+		foreach my $f ( @f ){
+			open(my $fh,"<",$f) or die "$f";
+			while(<$fh>){ chomp; my @a=split /\t/,$_;
+				$res{join(";",@a[0..5])}{$k}=$a[6];
+			}
+			close($fh);
+			$k++;
+		}	
+		foreach my $g (keys %res){
+			my @vs=(); my $zeros=0;	
+			for(my $i=0; $i < $k; $i++){
+				my $v=0;
+				if(defined $res{$g}{$i}){ $v= $res{$g}{$i}; }else{$zeros++;}
+				push @vs,$v;
+			}
+			if($zeros  < 4){
+				print $g,"\t",join("\t",@vs),"\n";
+			}
+		}
+	'
+	rm -rf $tmpd	
 }
 
 pa.comp_pcpa(){
@@ -118,9 +186,9 @@ USAGE: $FUNCNAME <gene.bed> <3utr> <trt.bed> <ctr.bed> <s> <log2fc>
 		print $p,"\t",join("\|",@a),"\n";
 	'| tail -n+2 | intersectBed -a stdin -b $2 -wa -v -s | cut -f7- | tr "|" "\t" \
         | awk -v OFS="\t" -v S=$5 -v FC=$6 '{
-                e="U"; eps=1; s=$2+$3;
+                e="U"; eps=1; s1=$2+$4; s2=$3+$5;
                 fc=($2+eps)*($3+$5+eps)/($2+$4+eps)/($3+eps);
-                if( s>=S){
+                if( $2+$3>= S && $2+$4 >=S && $3+$5 >=S ){
                         if(fc >= FC){ e="P";}
                         else if(fc <= 1/FC){ e="N";}
                 }else{ e="I";}
