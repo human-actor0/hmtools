@@ -31,4 +31,5 @@ export HMHOME
 # check HMHOME is correct
 echo $HMHOME
 ```
-
+## Usage
+[click here](https://github.com/actor0/hmtools/wiki/Home)
