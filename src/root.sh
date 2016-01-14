@@ -1,5 +1,10 @@
 #!/bin/bash
-
+escape(){
+cat $1 | perl -ne 'chomp;
+	$_=~ s/([^a-zA-Z0-9])/\\$1/g;
+	print $_,"\n";	
+'
+}
 mycat(){
 	if [[ -d $1 ]];then
 		cat ${1%/}/*;

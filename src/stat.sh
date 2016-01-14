@@ -292,6 +292,31 @@ b	2	20	22	20	22	20
 c	3	30	33	30	33	30" | stat.edger_test -
 }
 
+stat.edger_norep(){
+if [ $# -ne 2 ];then
+	echo \
+"USAGE $FUNCNAME <txt> <BCV>
+	<BCV>: 0.4: human data, 0.1: genetically identical, 0.01: technical replicates (edgeRUsersGuide)
+"
+return;
+fi
+	cat $1 | run_R '
+		require(edgeR);
+		tt=read.table("stdin",header=T);
+		head(tt);
+		bcv = '$2';
+		y = DGEList(counts=tt[,2:3],group=c(2,1))
+		et = exactTest(y, dispersion=bcv^2)	
+		write.table(file="stdout",cbind(tt,et$table),quote=F,sep="\t",row.names=F);
+	'
+}
+stat.edger_norep.test(){
+echo \
+"id	trt1.c1	ctr1.c1
+a	2	3
+b	4	19" | stat.edger_norep - 0.2
+}
+
 padjust(){
 usage="
 usage: $FUNCNAME <file> <pvalue_index>

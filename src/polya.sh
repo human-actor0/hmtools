@@ -12,18 +12,6 @@ CLUSTER=$HMHOME/src/cluster_1d_kmeans.sh
 BW=$HMHOME/bin/bedGraphToBigWig
 
 
-pa.read(){
-usage=" 
-FUNCT : find cleavage points split reads into unique and multiple hits 
-USAGE : $FUNCNAME <bam> [<Q>]
- [<Q>] : MAPQ threshold (default 10);
-"
-if [ $# -lt 2 ];then echo "$usage"; return; fi
-local Q=${3:-10};
-	samtools view -bq $Q $1 | bamToBed -split \
-        | bed.n2i - 
-
-}
 pa.filter(){ 
 usage="
 FUNCT: Filter inter-priming artefacts 
@@ -50,33 +38,42 @@ REFER: heppard, S., Lawson, N.D. & Zhu, L.J., 2013.Bioinformatics (Oxford, Engla
 		}
 	'
 }
+
+pa.read(){
+usage=" 
+FUNCT : preprocessing for the multiple hits 
+USAGE : $FUNCNAME <bam> <Q> <option>
+	<Q> : MAPQ threshold (default 10);
+	<option> : 0, use original seq name 1: convert it into integer ids
+"
+if [ $# -lt 3 ];then echo "$usage"; return; fi
+	samtools view -bq $2 $1 | bamToBed -split | bed.n2i - $3
+}
+
 pa.point(){
 usage="
-FUNCT: summarize scores of unique/multihit points 
-USAGE: $FUNCNAME <read.bed> [options]
- [options]:
-	-u : uniq read only
-"; if [ $# -lt 1 ]; then echo "$usage"; return; fi
-	local tmp="cat $1 ";
-	while getopts "uqn" opt "${@:2}"; do
-		case $opt in
-		 u) tmp="$tmp | awk '\$4~/\.1/'  ";;
-		esac	
-	done
-	echo "$tmp";
-	eval "$tmp" | bed.ss - | bed.3p - \
-	| awk -v OFS=";" '{ 
-		split($4,a,".");
-		s=0;if(a[2] > 0){ s=1/a[2];}
-		print $1,$2,$3,".",$6"\t"s; 
-	}' | stat.sum - | tr ";" "\t" | swapcol - 5 6 
+FUNCT: find polyA cleavage positions 
+USAGE: $FUNCNAME <read.bed> <method>
+	<method> := 0: sum scores, 1: count reads, 2: convert mapq to accuracy 
+"; if [ $# -ne 2 ]; then echo "$usage"; return; fi
+	bed.score $1 $2 | bed.5p - | bed.ss - \
+	| awk -v OFS=";" '{ l=split($4,a,":"); u="u";if(a[l]>1){u="m";} print $1,$2,u,$6"\t"$5; }' \
+	| stat.sum - | tr ";" "\t" | awk -v OFS="\t" '{
+		print $1,$2,$2+1,$3,$5,$4;
+	}'
 }
 
 pa.point.test(){
 echo \
-"c	1	2	0.2	1	+
-c	1	2	0.2	10	+
-c	2	3	1.1	255	+" | pa.point - -n
+"c	1	12	0:2	1	+
+c	1	12	hmm	10	+
+c	12	33	2:1	100	+
+c	12	33	2:1	100	-
+c	12	33	3:1	1000	+"\
+ | pa.point - 2 > tmp.obs
+cat tmp.obs
+#check tmp.exp tmp.obs
+rm tmp.obs
 }
 pa.cluster_sb(){ 
 usage="
@@ -111,6 +108,42 @@ c	13	14	r3	3	+
 c	6	7	r4	0.01	+" | pa.cluster_sb - 1 
 }
 
+pa.bw(){
+usage="
+FUNCT : make bigwing files from bed6
+USAGE : $FUNCNAME <bed> <chrom.size> <out> <norm>
+	[norm] : 0: no, 1: RPBM (read per bin per million reads)
+"
+if [ $# -ne 4 ];then echo "$usage"; return; fi
+	local tmpd=`mymktempd`
+	bed.sort $1 | awk -v OFS="\t" -v O=$tmpd '{
+		fout=O"/fwd"; if($6=="-"){ fout=O"/bwd";}
+		print $1,$2,$3,$5 >> fout;
+	}' 
+	local tot=`cat $tmpd/*wd | wc -l`;
+	for f in $tmpd/*wd;do
+		local n=${f##*/};
+		awk -v OFS="\t" -v tot=$tot '{
+			f=0; if(tot>0){ f=1000000/tot;}
+			print $1,$2,$3,$4*f;		
+		}' $f > $f.1
+		$HMHOME/bin/bedGraphToBigWig $f.1 $2 ${3}_${n}.bw
+	done
+	rm -rf $tmpd;
+}
+pa.bw.test(){
+echo \
+"c	100" > tmp.c
+
+echo \
+"c	1	2	.	1	+
+c	3	4	.	20	-
+c	5	6	.	10	-
+c	7	8	.	2	+" | pa.bw - tmp.c tmp.o 1
+ls -la tmp.*.bw
+rm -rf tmp.* 
+}
+
 
 pa.preptest(){
 usage="
@@ -119,7 +152,7 @@ USAGE: $FUNCNAME <gene.bed> <trt.bed> <ctr.bed>
 "; if [ $# -lt 3 ]; then echo "$ussage"; return; fi
 local D=${3:-10};
 	local tmpd=`mymktempd`;
-	bed.mcount -d -1 $2 $3 | intersectBed -a $1 -b stdin -wa -wb -s \
+	bed.mcount 0 $2 $3 | intersectBed -a $1 -b stdin -wa -wb -s \
 	| perl -ne 'chomp; my @a=split/\t/,$_;
 		print join(";",@a[0..5]),"\t",join(";",@a[6..11]),"\t",join("\t",@a[12..13]),"\n"' \
 	| stat.gix2gixnx - > $tmpd/a  
@@ -175,7 +208,7 @@ USAGE: $FUNCNAME <gene.bed> <3utr> <trt.bed> <ctr.bed>
 pa.comp_pcpa(){
 usage="
 FUNCT: relative FC  
-USAGE: $FUNCNAME <gene.bed> <3utr> <trt.bed> <ctr.bed> <s> <log2fc>
+USAGE: $FUNCNAME <gene.bed> <3utr> <trt.bed> <ctr.bed> <s> <fc>
 "; if [ $# -lt 6 ]; then echo "$usage"; return; fi
 
 	echo "gene@cluster trt.count trt.other ctr.count ctr.other FC sign" | tr " " "\t"
@@ -467,21 +500,6 @@ if [ $# -ne 2 ];then echo "$usage"; return; fi
 }
 
 
-bw(){
-	pa=$1; csize=$2; out=$3;
-	tmpd=`make_tempdir`
-	#tmpd="tmpd"; mkdir -p $tmpd;
-	sort_bed $1 | cut -f1-6 > $tmpd/a
-	tot=`cat $tmpd/a | perl -ne '@a=split/\t/,$_; $s+=$a[4]; END{ print $s/1000000;}'`
-	echo "norm_factor=$tot" > ${out}.info
-
-	awk -v OFS="\t" -v tot=$tot '{if($6=="+"){ print $1,$2,$3,$5/tot;}}' $tmpd/a > $tmpd/p
-	bedGraphToBigWig $tmpd/p $csize ${out}_fwd.bw; 
-
-	awk -v OFS="\t" -v tot=$tot '{if($6=="-"){ print $1,$2,$3,$5/tot;}}' $tmpd/a > $tmpd/n 
-	bedGraphToBigWig $tmpd/n $csize ${out}_bwd.bw
-	rm -rf $tmpd;
-}
 
 test__point(){
 echo \
