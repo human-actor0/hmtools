@@ -1,6 +1,7 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
 . $HMHOME/src/stat.sh
+
 bed.sort(){
  	sort -i -k 1,1 -k 2n,2 $1 
 }
@@ -17,10 +18,21 @@ USAGE: $FUNCNAME <bed> <outdir>
 
 bed.merge(){
 ## -s option performs differently in different versions
-usage="$FUNCNAME <bed> [mergeBed options] 
+usage="$FUNCNAME <bed> [mergeBed options]
 "
-if [ $# -lt 2 ];then echo "$usage"; return; fi
-	mycat $1 | mergeBed -i stdin ${@:2}
+if [ $# -lt 1 ];then echo "$usage"; return; fi
+	local opts=${@:2};
+	local opts_s="";
+	if [ -z ${opts##*\-s*} ];then 
+		opts_s=1; 
+		opts=${opts/\-s/};
+	fi
+	if [ -z $opts_s ];then
+		cat $1 | mergeBed -i stdin $opts 
+	else
+		awk -v OFS="\t" '{ $1=$1","$6;print $0;}' $1 | mergeBed -i stdin $opts \
+		| awk -v OFS="\t" '{ split($1,a,","); $1=a[1]; $3=$3"\t"a[2]; print $0;}' 
+	fi
 }
 bed.merge.test(){
 echo \
@@ -90,9 +102,9 @@ output: target + sum of read scores
 			local nf=`bed.nf $f`; 
 			intersectBed -a $f -b $tmpd/b/$c -wa -wb $opt_strand  \
 			| awk -v nf=$nf -v OFS="\t" '{ 
-				for(i=2; i<=nf;i++){ $1=$1";"$(i); }
+				for(i=2; i<=nf;i++){ $1=$1"@"$(i); }
 				print $1,$(nf+5);
-			}' | stat.sum - | tr ";" "\t" 
+			}' | stat.sum - | tr "@" "\t" 
 
 			if [ ! -z $opt_all ];then
 				intersectBed -a $f -b $tmpd/b/$c -v -s  \
@@ -121,6 +133,7 @@ rm -rf a b
 bed.mcount(){
 usage="
 FUNCT: make a merged bed and then recount 
+<<<<<<< HEAD
 USAGE: $FUNCNAME <dist> <bed> [<bed>,...] 
  [options]:
 	<dist> : maximum distance to be merged
@@ -156,25 +169,16 @@ rm tmp.a tmp.b exp obs
 
 
 bed.n2i(){
-usage="
-FUNCT: rename 4th column with <id>:<nhits>
-USAGE: $FUNCNAME <bed> [<flag>]
-	<flag>: [ 0: use original name field, 1: rename it with integers (default)]
-" 
-if [ $# -lt 1 ];then echo "$usage";return; fi
+usage="$FUNCNAME <bed>" 
+if [ $# -ne 1 ];then echo "$usage";return; fi
 	local tmpd=`mymktempd`;
 	#local tmpd=tmpd; mkdir -p tmpd;
-	local flag=${2:-1};
-
-	mycat $1 > $tmpd/a
 	cat $1 | perl -e 'use strict; 
-		my $flag='$flag';
-		my $file="'$tmpd/a'";
+		my $fileb="'$tmpd/b'";
 		my %ref=(); 
 
 		my $id=0; my $first=1;
-		open(my $fh, "<",$file) or die "$file";
-		while(<$fh>){chomp; my @a=split/\t/,$_;
+		while(<STDIN>){chomp; my @a=split/\t/,$_;
 			if(defined $ref{$a[3]}){
 				$ref{$a[3]}{n} ++;
 			}else{
@@ -183,16 +187,16 @@ if [ $# -lt 1 ];then echo "$usage";return; fi
 				$ref{$a[3]}{n} = 1;
 				$ref{$a[3]}{id} = $id;
 			}
+			$a[3]=$ref{$a[3]}{id};
+			print $a[3],"\t",join (";",@a),"\n";
+		}
+		
+		open(my $fh, ">",$fileb) or die "cannot open $fileb: $!";	
+		foreach my $k (keys %ref){
+			print $fh $ref{$k}{id},"\t",$ref{$k}{n},"\n";	
 		}
 		close($fh);
-		open(my $fh, "<",$file) or die "$file";
-		while(<$fh>){chomp; my @a=split/\t/,$_;
-			my $id=$a[3];
-			if($flag==1){ $id=$ref{$id}{id};}
-			$a[3]=$id.":".$ref{$a[3]}{n};
-			print join("\t",@a),"\n"; 
-		}
-	'
+	' | sort -k1,1n > $tmpd/a
 	rm -rf $tmpd
 }
 
@@ -206,6 +210,178 @@ c	1	2	r2	1	+
 c	1	2	r3	1	+" | bed.n2i - 0
 }
 
+bed.mhits(){
+
+usage="
+FUNCT: redistribute multi-hits using EM algorithm
+USAGE: $FUNCNAME <target> <multi_reads> [-s|-S]
+"; if [ $# -lt 2 ];then echo "$usage"; return; fi
+local MAXITER=100;
+local DELTA=0.001;
+local OPT=${3:-""};
+
+	intersectBed -a $1 -b $2 -wa -wb $OPT \
+	| perl -e 'use strict; 
+		my $MAXITER='$MAXITER';
+		my $DELTA='$DELTA';
+
+		my %E=(); # relative,normalized gene expression frequency
+		my %A=(); # a fraction of a read attributed to a gene 
+		my %L=(); # gene lengths
+		my $Lread=0; my $Ltot=0;
+		my $TOT=0; # total weighted reads
+		my $s=0;
+
+		sub ss{ ## root sum of squares
+			my ($h1, $h2)=@_;
+			my $s=0;
+			foreach my $k (keys %$h1){
+			if( defined $h2->{$k} ){
+				$s += $h1->{$k} * $h2->{$k};
+			}}	
+			return $s;
+		}
+		sub min{
+			my ($x,$y)=@_;
+			if($x > $y){ return( $y);}
+			return $x;
+		}
+		sub max{
+			my ($x,$y)=@_;
+			if($x > $y){ return( $x);}
+			return $y;
+		}
+
+		sub normE{
+			my ($E, $L, $Lread) = @_;
+			## normalize by effective gene lengths
+			my $s=0;
+			foreach my $g (keys %$E){
+				my $len = $L->{$g} - $Lread + 1;
+				if($len >0){ $E->{$g} /= $len;
+				}else{ $E->{$g} = 0;}
+				$s += $E->{$g};
+			}
+			## normalize gene expressions
+			foreach my $g (keys %$E){ $E->{$g} /= $s;}
+		}
+		sub estE{
+			my ($Ein, $A,      $Eout) = @_;
+			## I do not think of separating uniq and multi reads
+			foreach my $r (keys %$A){
+				my $s=0; my $norm=0;
+				foreach my $g (keys %{$A->{$r}}){ $s += $Ein->{$g}; }	
+				if($s > 0){ $norm = 1/$s; }
+				foreach my $g (keys %{$A->{$r}}){
+					$Eout->{$g} += $Ein->{$g} * $norm;
+				}
+			}
+		}
+		sub update{
+			my ($Ein, $A,$L,$Lread,     $Eout) = @_;
+
+			## estimate expression by reads
+			estE( $Ein, $A, $Eout);
+			normE( $Eout, $L, $Lread);
+		}
+
+		my $minStep0 = 1.0;
+		my $minStep = 1.0;
+		my $maxStep0 = 1.0;
+		my $maxStep = 1.0;
+		my $mStep = 4.0;
+		my $OPT_TOL=0.01;
+
+
+		while(<STDIN>){chomp;
+			my ($chr,$start,$end,$gid,$score,$strand, $chr2,$start1,$end1,$rid,$score1,$strand1)=split /\t/,$_;
+			$Lread += $end1-$start1; $Ltot ++; 
+			$L{$gid}=$end-$start;
+			$A{$rid}{$gid} = $score1;
+			$E{$gid} = 0;
+		}
+
+		## estimated read length	
+		$Lread /= $Ltot;
+
+		## init with 1/n weighted read counts 
+		foreach my $r (keys %A){
+			my $n=scalar keys %{$A{$r}};
+			foreach my $g (keys %{$A{$r}}){ $E{$g} += 1/$n; }
+		}
+		normE(\%E,\%L,$Lread);
+		my %E1=(); 
+		my %E2=(); 
+		my %Eprime=();
+		my $Eres = "";
+		my %r=(); my %r2=(); my %v=();
+		foreach my $iter ( 1..$MAXITER){
+			print "ITER--$iter: \n";
+			update(\%E,\%A,\%L,$Lread,\%E1);
+			update(\%E1,\%A,\%L,$Lread,\%E2);
+
+			foreach my $g ( keys %E){
+				$r{$g} = $E1{$g} - $E{$g};
+				$r2{$g} = $E2{$g} - $E1{$g};
+				$v{$g} = ($E2{$g} - $E1{$g})-$r{$g};
+			}
+			my $rNorm = sqrt(ss( \%r,\%r));
+			my $r2Norm = sqrt(ss( \%r2,\%r2));
+			my $vNorm = sqrt(ss( \%v,\%v));
+			my $rvNorm = sqrt(abs(ss(\%r,\%v)));
+			if ( $vNorm == 0 ){
+				print {*STDERR}	"$rNorm,$r2Norm,$vNorm, vnorm == 0\n"; last;	
+			}
+			my $alphaS=$rNorm/$rvNorm;
+			my $alphaS=max($minStep, min($maxStep,$alphaS));
+
+			if ( $rNorm < $OPT_TOL ){
+				print {*STDERR} "rNorm=$rNorm \n"; last;
+			}
+			if ( $r2Norm < $OPT_TOL ){
+				print {*STDERR} "r2Norm=$r2Norm \n"; last;
+				$Eres = \%E2;
+			}
+		
+			## extraplate 
+			foreach my $g (keys %E){
+				$Eprime{$g} = max(0.0, $E{$g} + 2 * $alphaS * $r{$g} + ($alphaS*$alphaS)*$v{$g});
+			}	
+			update(\%Eprime,\%A,\%L,$Lread,\%E);
+
+			## stabilization
+			if (abs( $alphaS - 1.0 ) > 0.01 ){
+				print {*STDERR} "stablizaation step:\n";
+				if ($alphaS == $maxStep){ 
+					$maxStep=max($maxStep0, $maxStep/$mStep);
+					$alphaS = 1.0;
+				}
+			}
+			if ($alphaS == $maxStep){ $maxStep = $mStep * $maxStep;}
+			if ($minStep < 0 && $alphaS == $minStep ){ $minStep = $mStep * $minStep;}
+			print "alpha=$alphaS\n";
+
+		}
+	'
+}
+bed.mhits.test(){
+echo \
+"c	0	100	t1	0	+
+c	100	200	t2	0	+
+c	300	400	t3	0	+" > genes
+
+echo \
+"c	10	21	r1	1	+
+c	10	21	r4	1	+
+c	300	310	r1	1	+
+c	110	120	r2	1	+
+c	310	320	r2	1	+
+c	13	23	r3	1	+
+c	150	170	r3	1	+" > reads
+
+bed.mhits genes reads
+rm -rf genes reads
+}
 
 
 bed_join(){
@@ -405,6 +581,7 @@ bed_add(){
 	}
 	foreach my $k (keys %res){ print $k,"\t",$res{$k},"\n";}
 	' $@;
+	modify_score $@
 }
 bed.sum(){
 	perl -e 'use strict; my %res=();
@@ -425,7 +602,7 @@ bed.sum.test(){
 echo \
 "chr1	1	2	a	1	+
 chr1	1	2	a	2	-
-chr1	1	2	a	3	+" | bed.sum - > obs
+chr1	1	2	a	3	+" | bed_sum - > obs
 
 echo \
 "chr1	1	2	a	2	-
@@ -490,18 +667,29 @@ bed12_to_lastexon(){
 	    print $1,s,e,$4,i,$6;
 	}' $1
 }
-bed12_to_exon(){
-## not tested
-	awk -v OFS="\t" '{ split($11,sizes,",");split($12,starts,",");
+
+bed.exon(){
+usage="
+USAGE: $FUNCNAME <bed12>
+"
+if [ $# -ne 1 ];then echo "$usage"; return; fi
+	mycat $1 | awk -v OFS="\t" '{ split($11,sizes,",");split($12,starts,",");
 		for(i=1; i<=$10; i++){
 	    		s=$2+starts[i]; e=s+sizes[i];
 			print $1,s,e,$4,$5,$6;
 		}
-	}' $1 
+	}'
+	
 }
-bed12_to_intron(){
+
+
+bed.intron(){
+usage="
+USAGE: $FUNCNAME <bed12>
+"
+if [ $# -ne 1 ];then echo "$usage"; return; fi
 	##  [es   ]s----e[    ee]
-	awk -v OFS="\t" '$10 > 1{
+	mycat $1 | awk -v OFS="\t" '$10 > 1{
 		## take introns
 		split($11,sizes,",");
 		split($12,starts,",");
@@ -512,10 +700,7 @@ bed12_to_intron(){
 			#ls = $2 + starts[i-1]; le = ls + sizes[i-1]; rs = $2 + starts[i]; re = rs + sizes[i];
 			print $1,s,e,$4,$5,$6;
 		}	
-	}' $1 | sort -u
-}
-bed.intron(){
-	bed12_to_intron $1
+	}' 
 }
 
 bed_flat(){ 

@@ -316,6 +316,13 @@ echo \
 a	2	3
 b	4	19" | stat.edger_norep - 0.2
 }
+stat.edger_test.test(){
+echo \
+"id	trt1.c1	trt1.c2	trt2.c1	trt2.c2	ctr1.c1	ctr1.c2
+a	1	10	11	10	11	10
+b	2	20	22	20	22	20
+c	3	30	33	30	33	30" | stat.edger_test -
+}
 
 padjust(){
 usage="

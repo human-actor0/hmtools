@@ -12,6 +12,21 @@ CLUSTER=$HMHOME/src/cluster_1d_kmeans.sh
 BW=$HMHOME/bin/bedGraphToBigWig
 
 
+<<<<<<< HEAD
+=======
+pa.read(){
+usage=" 
+FUNCT : find cleavage points split reads into unique and multiple hits 
+USAGE : $FUNCNAME <bam> [<Q>]
+ [<Q>] : MAPQ threshold (default 10);
+"
+if [ $# -lt 2 ];then echo "$usage"; return; fi
+local Q=${3:-10};
+	samtools view -bq $Q $1 | bamToBed -split \
+        | bed.n2i - 
+
+}
+>>>>>>> 25773133df552fe5b6d4ecae6e912ef7f7fcbcf5
 pa.filter(){ 
 usage="
 FUNCT: Filter inter-priming artefacts 
@@ -38,6 +53,7 @@ REFER: heppard, S., Lawson, N.D. & Zhu, L.J., 2013.Bioinformatics (Oxford, Engla
 		}
 	'
 }
+<<<<<<< HEAD
 
 pa.read(){
 usage=" 
@@ -61,10 +77,33 @@ USAGE: $FUNCNAME <read.bed> <method>
 	| stat.sum - | tr ";" "\t" | awk -v OFS="\t" '{
 		print $1,$2,$2+1,$3,$5,$4;
 	}'
+=======
+pa.point(){
+usage="
+FUNCT: summarize scores of unique/multihit points 
+USAGE: $FUNCNAME <read.bed> [options]
+ [options]:
+	-u : uniq read only
+"; if [ $# -lt 1 ]; then echo "$usage"; return; fi
+	local tmp="cat $1 ";
+	while getopts "uqn" opt "${@:2}"; do
+		case $opt in
+		 u) tmp="$tmp | awk '\$4~/\.1/'  ";;
+		esac	
+	done
+	echo "$tmp";
+	eval "$tmp" | bed.ss - | bed.3p - \
+	| awk -v OFS=";" '{ 
+		split($4,a,".");
+		s=0;if(a[2] > 0){ s=1/a[2];}
+		print $1,$2,$3,".",$6"\t"s; 
+	}' | stat.sum - | tr ";" "\t" | swapcol - 5 6 
+>>>>>>> 25773133df552fe5b6d4ecae6e912ef7f7fcbcf5
 }
 
 pa.point.test(){
 echo \
+<<<<<<< HEAD
 "c	1	12	0:2	1	+
 c	1	12	hmm	10	+
 c	12	33	2:1	100	+
@@ -74,6 +113,11 @@ c	12	33	3:1	1000	+"\
 cat tmp.obs
 #check tmp.exp tmp.obs
 rm tmp.obs
+=======
+"c	1	2	0.2	1	+
+c	1	2	0.2	10	+
+c	2	3	1.1	255	+" | pa.point - -n
+>>>>>>> 25773133df552fe5b6d4ecae6e912ef7f7fcbcf5
 }
 pa.cluster_sb(){ 
 usage="
@@ -108,6 +152,7 @@ c	13	14	r3	3	+
 c	6	7	r4	0.01	+" | pa.cluster_sb - 1 
 }
 
+<<<<<<< HEAD
 pa.bw(){
 usage="
 FUNCT : make bigwing files from bed6
@@ -144,6 +189,8 @@ ls -la tmp.*.bw
 rm -rf tmp.* 
 }
 
+=======
+>>>>>>> 25773133df552fe5b6d4ecae6e912ef7f7fcbcf5
 
 pa.preptest(){
 usage="
@@ -152,7 +199,11 @@ USAGE: $FUNCNAME <gene.bed> <trt.bed> <ctr.bed>
 "; if [ $# -lt 3 ]; then echo "$ussage"; return; fi
 local D=${3:-10};
 	local tmpd=`mymktempd`;
+<<<<<<< HEAD
 	bed.mcount 0 $2 $3 | intersectBed -a $1 -b stdin -wa -wb -s \
+=======
+	bed.mcount -d -1 $2 $3 | intersectBed -a $1 -b stdin -wa -wb -s \
+>>>>>>> 25773133df552fe5b6d4ecae6e912ef7f7fcbcf5
 	| perl -ne 'chomp; my @a=split/\t/,$_;
 		print join(";",@a[0..5]),"\t",join(";",@a[6..11]),"\t",join("\t",@a[12..13]),"\n"' \
 	| stat.gix2gixnx - > $tmpd/a  
@@ -208,7 +259,11 @@ USAGE: $FUNCNAME <gene.bed> <3utr> <trt.bed> <ctr.bed>
 pa.comp_pcpa(){
 usage="
 FUNCT: relative FC  
+<<<<<<< HEAD
 USAGE: $FUNCNAME <gene.bed> <3utr> <trt.bed> <ctr.bed> <s> <fc>
+=======
+USAGE: $FUNCNAME <gene.bed> <3utr> <trt.bed> <ctr.bed> <s> <log2fc>
+>>>>>>> 25773133df552fe5b6d4ecae6e912ef7f7fcbcf5
 "; if [ $# -lt 6 ]; then echo "$usage"; return; fi
 
 	echo "gene@cluster trt.count trt.other ctr.count ctr.other FC sign" | tr " " "\t"

@@ -1,7 +1,90 @@
 #!/bin/bash
-
 . $HMHOME/src/root.sh
+. $HMHOME/src/bed.sh
 
+ucsc.chrom_size(){
+if [ $1 = "hg19" ];then
+echo \
+"chr1	249250621
+chr2	243199373
+chr3	198022430
+chr4	191154276
+chr5	180915260
+chr6	171115067
+chr7	159138663
+chr8	146364022
+chr9	141213431
+chr10	135534747
+chr11	135006516
+chr12	133851895
+chr13	115169878
+chr14	107349540
+chr15	102531392
+chr16	90354753
+chr17	81195210
+chr18	78077248
+chr19	59128983
+chr20	63025520
+chr21	48129895
+chr22	51304566
+chrX	155270560
+chrY	59373566
+chrM	16571"
+else
+	echo "no such $1 genome" >&2
+fi
+}
+
+ucsc.bg2bw(){
+usage="
+USAGE: $FUNCNAME <chrom.size> <bedGraph> [<bedGraph>]
+"
+if [ $# -lt 2 ];then echo "$usage";return; fi
+	local tmpd=`mymktempd`;
+	if [ -f $1 ];then
+		chromsize=$1;
+	else
+		ucsc.chrom_size $1 > $tmpd/a
+		chromsize=$tmpd/a	
+	fi
+	local cmd='use strict; my %chrom=();
+		open(F,"<","'$chromsize'") or die "cannot open $!";
+		while(<F>){ chomp; my ($c,$l)=split /\t/,$_; $chrom{$c}=$l; }
+		close(F);
+		while(<STDIN>){ chomp; my @a=split/\t/,$_;
+			my $l= (defined $chrom{$a[0]}) ? $chrom{$a[0]}: "";
+			next if ($l eq "");	
+			if($a[1] < 0){ $a[1]=0;}
+			if($a[2] < 1){ $a[2]=2;}
+			if($a[1] > $l-1){ $a[1]=$l-1;}
+			if($a[2] > $l){ $a[2]=$l;}
+			print join("\t",@a),"\n";
+		}	
+	'
+		
+	for f in ${@:2};do
+		o=${f/.bedGraph/.bw};
+		bed.sort $f | perl -e "$cmd" > $tmpd/b
+		bedGraphToBigWig $tmpd/b $tmpd/a $o
+	done
+	rm -rf $tmpd
+}
+
+ucsc.bg2bw.test(){
+echo \
+"chr1	1	2	1
+chr1	2	3	4
+chr111	2	3	4
+chr1	-2	1	4
+chr1	249250621	249250629	100
+chr2	3	4	7" > tmp.bedGraph
+ucsc.bg2bw hg19 tmp.bedGraph 
+rm -rf tmp.bedGraph tmp.bw
+}
+
+ucsc.url(){
+	$HMOME/bin/ucsc_url.pl $@
+}
 ucsc.bed12(){
 	mycat $1 perl -ne '
 	    chomp;

@@ -51,3 +51,20 @@ check obs exp
 rm -rf obs exp
 
 }
+
+bruseq.track(){
+usage="$FUNCNAME <bed12> <bin> <track_name> [track options]
+	
+"
+## separate by strand and splicing or unsplicing	
+	local tmpd=`mymktempd`;
+	local track_name=$3;
+	mycat $1 > $tmpd/a; 
+	bed.exon $tmpd/a | bruseq.bedgraph - $2 $tmpd/b
+
+	echo "track name=${track_name}_fwd type=bedGraph color=0,0,0 group=${track_name}"
+	cat $tmpd/b_fwd.bedGraph 
+	echo "track name=${track_name}_bwd type=bedGraph color=0,0,0 group=${track_name}"
+	cat $tmpd/b_bwd.bedGraph
+	rm -rf $tmpd
+}

@@ -1,5 +1,6 @@
 . $HMHOME/src/root.sh
 
+<<<<<<< HEAD
 
 
 
@@ -228,9 +229,30 @@ mhits.cgraph(){
 }
 
 mhits.cgraph.test(){
+=======
+mhits.clique(){
+	cat $1 | perl -e 'use strict;
+		my %res=();
+		while(<STDIN>){ chomp; 
+			my ($t,$r) = split/\t/,$_;
+			$res{$r}{$t}=1;
+		}
+		foreach my @$r (keys %res){
+			if($#r > 0){
+			}
+		}
+	';
+}
+
+mhits.clique.test(){
+>>>>>>> 25773133df552fe5b6d4ecae6e912ef7f7fcbcf5
 echo "t1	r1
 t1	r2
 t2	r1
 t2	r2
+<<<<<<< HEAD
 t3	r1" | mhits.cgraph -
+=======
+t3	r1" | mhits.clique -
+>>>>>>> 25773133df552fe5b6d4ecae6e912ef7f7fcbcf5
 }

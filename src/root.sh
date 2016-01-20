@@ -1,10 +1,18 @@
 #!/bin/bash
+
+## check executive files
+bedGraphToBigWig(){
+	$HMHOME/bin/bedGraphToBigWig $@
+}
+
+
 escape(){
 cat $1 | perl -ne 'chomp;
 	$_=~ s/([^a-zA-Z0-9])/\\$1/g;
 	print $_,"\n";	
 '
 }
+
 mycat(){
 	if [[ -d $1 ]];then
 		cat ${1%/}/*;
@@ -77,6 +85,9 @@ quote(){
 	local del=${2:-","};
 	perl -ne 'chomp; print join("'$del'", map{ "\"$_\"" } split( /\s+/,$_ )),"\n"';
 }
+
+# array=( "${array[@]/%/_content}" )
+# array=( "${array[@]/#/prefix_}" )
 
 # array=( "${array[@]/%/_content}" )
 # array=( "${array[@]/#/prefix_}" )

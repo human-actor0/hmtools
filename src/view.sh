@@ -1,8 +1,8 @@
 #!/bin/bash
 
 . $HMHOME/src/root.sh
-. $HMHOME/src/polya.sh
-. $HMHOME/src/splicing.sh
+#. $HMHOME/src/polya.sh
+. $HMHOME/src/asp.sh
 
 #datq=( $@ );
 #for f in ${@:2};do
@@ -25,13 +25,13 @@
 #
 #}
 
-bruseq_to_track(){
+view.track_bruseq(){
 usage="$FUNCNAME <bed12> <track_name>"
 ## separate by strand and splicing or unsplicing	
-	mkdir -p tmpd; rm -rf tmpd/*
-	mycat $1 | awk -v OFS="\t" '{$1=$1","$6; $4="."; $5=1;print $0;}' > tmpd/a
+	local tmpd=`mymktempd`;
+	mycat $1 | awk -v OFS="\t" '{$1=$1","$6; $4="."; $5=1;print $0;}' > $tmpd/a
 	awk '$10==1' tmpd/a | cut -f1-6 > tmpd/u #unsplicing
-	bed12_to_exon tmpd/a > tmpd/s #splicing
+	bed.exon tmpd/a > tmpd/s #splicing
 	bed12_to_jc tmpd/a > tmpd/j  #junctions
 	cat tmpd/s tmpd/u | sort -k1,1 -k2,3n | bed_flat - > tmpd/f # flattend
 
@@ -57,7 +57,7 @@ usage="$FUNCNAME <bed12> <track_name>"
 	cat tmpd/j+.bedGraph
 	echo "track name=${track_name}_sp_bwd type=bedJunction color=255,0,0 group=${track_name}"
 	cat tmpd/j-.bedGraph | awk -v OFS="\t" '{ $4=-$4;} 1'
-	rm -rf tmpd/*
+	rm -rf $tmpd
 }
 polya_to_track(){
 usage="
