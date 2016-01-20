@@ -44,6 +44,7 @@ usage=" $FUNCNAME <intron.bed6> <read.bed6> <window> <strand>
 	<window>: window: <int>
                      |---W----|---W---|
 	[    ]-----------un---[ sp         ]
+	OUTPUT: junction boundary (2W bps) in bed6 + #spliced + #unspliced 
 			    
 "
 	if [ $# -lt 4 ];then echo "$usage"; return; fi
@@ -56,9 +57,9 @@ usage=" $FUNCNAME <intron.bed6> <read.bed6> <window> <strand>
 	bed.exon $2 > $tmpd/b; 
 	bed.flank $tmpd/a  $(( $W -1 )) 0 1 > $tmpd/a.u
 	bed.flank $tmpd/a -1 $W 1 > $tmpd/a.s
-	bed.count $tmpd/a.u $tmpd/b $S | cut -f 4,7 | sort -k1,1 > $tmpd/x 	
-	bed.count $tmpd/a.s $tmpd/b $S | cut -f 4,7 | sort -k1,1 > $tmpd/y
-	join -a 1 -a 2 -e 0 -o 0,1.2,2.2 $tmpd/x $tmpd/y | tr " ;" "\t" \
+	bed.count $tmpd/a.u $tmpd/b $S | cut -f 4,7 | sort -u -k1,1 > $tmpd/x 	
+	bed.count $tmpd/a.s $tmpd/b $S | cut -f 4,7 | sort -u -k1,1 > $tmpd/y
+	join -a 1 -a 2 -e 0 -o 0,1.2,2.2 $tmpd/y $tmpd/x | tr " ;" "\t" \
 	| bed.flank - $(( $W - 1 )) $W 1
 	rm -rf $tmpd
 }
