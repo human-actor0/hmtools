@@ -31,7 +31,7 @@ tophat2.run_pair(){
 			echo "run .. $RUN"
 			cmd='
 				#!/bin/sh
-				#BSUB -n $NPROC
+				#BSUB -n '$NPROC'
 				#BSUB -o bsub.out.%J
 				#BSUB -e bsub.err.%J
 				#BSUB -J tophat2_${n}
