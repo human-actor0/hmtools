@@ -14,10 +14,10 @@
 
 tophat2.run_pair(){
 	RUN=${1:-bash}; ## put run command
-	BOWTIE2=${BOWTIE2:-bowtie2}
+	TOPHAT2=${TOPHAT2:-tophat2}
 	if [ -z $NPROC  ] || \
 	   [ -z $BOWTIE2_IDX ] || \
-	   [ -x $BOWTIE2 ] || \
+	   [ -x $TOPHAT2 ] || \
 	   [ -z $TRANSCRIPTOME_IDX ]; then 
 		echo "see usage"; return;
 	fi
@@ -36,7 +36,7 @@ tophat2.run_pair(){
 				#BSUB -e bsub.err.%J
 				#BSUB -J tophat2_${n}
 				#mkdir -p $OUT
-				tophat2 --no-coverage-search  --no-novel-juncs --no-novel-indels \
+				'$TOPHAT2' --no-coverage-search  --no-novel-juncs --no-novel-indels \
 					--transcriptome-index '$TRANSCRIPTOME_IDX' \
 					-p '$NPROC' \
 					-o '$OUT' '$BOWTIE2_IDX' '$FQ1' '$FQ2'
