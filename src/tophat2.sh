@@ -17,7 +17,7 @@ tophat2.run_pair(){
 	TOPHAT2=${TOPHAT2:-tophat2}
 	if [ -z $NPROC  ] || \
 	   [ -z $BOWTIE2_IDX ] || \
-	   [ -x $TOPHAT2 ] || \
+	   [ ! -x $TOPHAT2 ] || \
 	   [ -z $TRANSCRIPTOME_IDX ]; then 
 		echo "see usage"; return;
 	fi
