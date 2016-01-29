@@ -52,19 +52,84 @@ rm -rf obs exp
 
 }
 
-bruseq.track(){
-usage="$FUNCNAME <bed12> <bin> <track_name> [track options]
-	
+bruseq.bedgraph_smart(){
+usage="
+FUNCT: bed6 to 1bp resolution bedGraph
+USAGE: $FUNCNAME <bed> <out_name>
+	will produce <outdir>/fwd.bedGraph and <outdir>/bwd.bedGraph
+EXAMP:
+	INPUT
+	[  1  )   [  2  )
+	  [3 )  [  4  )
+
+	OUTPUT
+	[1) [1) 
+          [ )
 "
+if [ $# -lt 2 ]; then echo "$usage"; return; fi
+	rm -rf ${2}_fwd.bedGraph ${2}_bwd.bedGraph;
+	local tmpd=`mymktempd`;
+	mycat $1 > $tmpd/a
+	bed.flat $tmpd/a > $tmpd/b
+	bed.count $tmpd/b $tmpd/a -s \
+	| awk -v OFS="\t" -v O=$2 '{
+		if($6=="+"){ fout=O"_fwd.bedGraph";	
+		}else{ fout=O"_bwd.bedGraph"; }
+		print $1,$2,$3,$7 >> fout;
+	}'
+	rm -rf $tmpd;
+}
+
+bruseq.bedgraph_smart.test(){
+echo \
+"chr1	100	200	.	1	+
+chr1	150	250	.	2	+
+chr1	100	200	.	1	-
+chr2	110	220	.	1	-" | bruseq.bedgraph_smart - tmp
+head tmp_fwd.bedGraph tmp_bwd.bedGraph > tmp.obs
+echo \
+"==> tmp_fwd.bedGraph <==
+chr1	100	150	.	1	+
+chr1	200	250	.	2	+
+chr1	150	200	.	3	+
+
+==> tmp_bwd.bedGraph <==
+chr1	100	200	.	1	-
+chr2	110	220	.	1	-" > tmp.exp
+check tmp.obs tmp.exp
+
+rm tmp_*.bedGraph tmp.obs tmp.exp
+}
+
+bruseq.track(){
+usage="$FUNCNAME <bed12> <track_name> <color>
+	<color>: RGB (ex. black = 0,0,0 )
+"
+if [ $# -ne 3 ];then echo "$usage"; return; fi
 ## separate by strand and splicing or unsplicing	
 	local tmpd=`mymktempd`;
-	local track_name=$3;
+	local track_name=$2;
 	mycat $1 > $tmpd/a; 
-	bed.exon $tmpd/a | bruseq.bedgraph - $2 $tmpd/b
+	bed.exon $tmpd/a | bruseq.bedgraph_smart - $tmpd/b
 
-	echo "track name=${track_name}_fwd type=bedGraph color=0,0,0 group=${track_name}"
-	cat $tmpd/b_fwd.bedGraph 
-	echo "track name=${track_name}_bwd type=bedGraph color=0,0,0 group=${track_name}"
-	cat $tmpd/b_bwd.bedGraph
+	if [ -f $tmpd/b_fwd.bedGraph ];then
+		echo "track name=${track_name}_fwd type=bedGraph color=0,0,0 parent=${track_name}"
+		cat $tmpd/b_fwd.bedGraph 
+	fi
+	if [ -f $tmd/b_bwd.bedGraph ];then
+		echo "track name=${track_name}_bwd type=bedGraph color=0,0,0 parent=${track_name}"
+		cat $tmpd/b_bwd.bedGraph
+	fi
 	rm -rf $tmpd
 }
+bruseq.track.test(){
+echo \
+"chr1	1000	2000	g1	0	+	1000	2000	0,0,0	3	100,100,100	0,500,900"> tmp.gene
+echo \
+"chr1   1050    1550    r1      1       +       1050    1550    255,0,0 2       50,50   0,450
+chr1   1050    1950    r1      1       +       1050    1950    255,0,0 2       50,50   0,850"> tmp.read
+bruseq.track tmp.read track1 0,0,0
+rm tmp.read tmp.gene
+}
+
+

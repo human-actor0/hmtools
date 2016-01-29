@@ -150,7 +150,7 @@ cmd='use strict;
 
 
 
-track_to_png(){
+view.png(){
 cmd='
 	getrgb=function(x){ 
 		if(is.null(x)){
@@ -186,12 +186,16 @@ cmd='
 			}
 		}
 	}
-	draw_bedjunction=function(data,chrom,cstart,cend,color,main){
+	draw_splicing=function(data,chrom,cstart,cend,color,main){
 		s=data[,2];e=data[,3]-1;c=data[,4];n=length(c);
 		#plot(1,xlim=c(cstart,cend),ylim=c(min(c),max(c)),col="white",main=main)
-		for(i in 1:n){
-			segments(s[i],c[i],e[i],c[i],color,lty=2,lwd=2);
-		}
+		pv=0.5*(s+e);		
+		segments(s,0,pv,c);
+		segments(pv,c,e,0);
+		#for(i in 1:n){
+		#	pv=0.5*(s[i]+e[i]);
+		#	segments(s[i],c[i],0.5*(s[i]+e[i]),c[i],color,lty=2,lwd=2);
+		#}
 	}
 	draw_bedgraph=function(data,chrom,cstart,cend,color,main){
 		s=data[,2];e=data[,3]-1;c=data[,4];n=length(c);
@@ -270,15 +274,15 @@ cmd='
 				draw_genetrack(data[[n]]$df,chrom,cstart,cend,n);
 			}else if(type=="bedGraph"){
 				draw_bedgraph(data[[n]]$df,chrom,cstart,cend,color,n);
-			}else if(type=="bedJunction"){
-				draw_bedjunction(data[[n]]$df,chrom,cstart,cend,color,n);
+			}else if(type=="splicing"){
+				draw_splicing(data[[n]]$df,chrom,cstart,cend,color,n);
 			}
 		}
 	}
 	dev.off();
 
 '
-	tmpd=`make_tempdir`
+	local tmpd=`mymktempd`
 	mycat $1 > $tmpd/a
 	cmd=${cmd/INPUT/$tmpd/a};
 	#a=( `echo $2 | tr ":-" "\t"` );
@@ -288,7 +292,7 @@ cmd='
 	rm -rf $tmpd
 }
 
-test(){
+view.png.test(){
 
 #echo \
 #"chr1	1	2	p1	1	+
@@ -306,22 +310,22 @@ chr1	1	2	1
 chr1	2	3	2
 chr1	5	6	7
 chr1	7	8	1
+track name=sp1_fwd type=splicing description="junction" color=0,255,0,
+chr1	10	20	1
+chr1	10	70	2
 track name=mypolya1_bwd type=bedGraph description="myPolyA 1" color=0,0,255,
 chr1	5	6	7
 chr1	7	8	1
 track name=gene1 type=bed description="gene 1" color=0,0,255,
 chr1	0	100	n1	0	+	10	90	0,0,0	3	10,20,30	0,20,70
 chr1	0	100	n2	0	-	10	90	0,0,255	3	10,20,30	0,20,70' \
-| track_to_png - out.png
+| view.png - out.png
 
 #track_to exp chr1:0-10 out
 #
 #check exp obs
 #track_to_png "chr:0-10" obs
 #rm -rf exp obs
-
-echo \
-
 
 }
 

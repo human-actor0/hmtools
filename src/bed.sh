@@ -703,67 +703,72 @@ if [ $# -ne 1 ];then echo "$usage"; return; fi
 	}' 
 }
 
-bed_flat(){ 
+bed.flat(){ 
 usage="$FUNCNAME [options] <bed6>
      input:
-     [     ]
-        [      ]
+     [     )
+        [      )
      output:
-     [ ][  ][  ] 
+     [  )  [   )
+        [  )
 "; if [ $# -lt 1 ]; then echo "$usage";exit; fi
-
-	mergeBed -i stdin -d -1 -c 2,3 -o distinct,distinct \
+	bed.sort $1 | mergeBed -i stdin -d -1 -s -c 2,3,4,5 -o distinct,distinct,distinct,distinct \
 	| perl -ne ' chomp; my @a=split /\t/,$_; 
-		my %pm=();
-		foreach my $s (split/,/,$a[3]){ $pm{$s}=1;}
-		foreach my $e (split/,/,$a[4]){ $pm{$e}=1;}
-		if(scalar keys %pm ==1){
-			print $a[0],"\t",$a[1],"\t",$a[2],"\n";
+		#print join("\t",@a),"\n";
+		my %h=();
+		my @s=split/,/,$a[4];
+		my @e=split/,/,$a[5];
+		if( scalar @s == 1){
+			print $a[0],"\t",$a[1],"\t",$a[2],"\t",$a[6],"\t",$a[7],"\t",$a[3],"\n";
 			next;
 		}
-		my @p=sort {$a<=>$b} keys %pm; 
-		for(my $i=0; $i< $#p; $i++){
-		    my $pi = $p[$i]; my $pj = $p[$i+1];
-		    if($pj > $pi){
-			print $a[0],"\t",$pi,"\t",$pj,"\n";
-		    }
-		} 
+		for( my $i=0;$i<=$#s; $i++){
+			$h{$s[$i]}=0;
+			$h{$e[$i]-1}=1;
+		}
+		my @k=sort {$a<=>$b} keys %h;
+		for( my $i=0; $i<$#k; $i++){
+			my $s= $k[$i] + $h{ $k[$i] };
+			my $e= $k[$i+1] + $h{ $k[$i+1] };
+			print $a[0],"\t$s\t$e\t",$a[6],"\t",$a[7],"\t",$a[3],"\n";
+		}
+
 	' 
 }
 
-test__bed_flat(){
-echo \
-'chr	11	13	.	1	+
-chr	12	14	.	2	-
-chr	12	14	.	3	-
-chr	1	4	.	4	+
-chr	2	3	.	5	+' > inp
+bed.flat.test(){
 
-cat inp | awk -v OFS="\t" '{ $1=$1"@"$6; $6="";$0=$0;}1'   \
-| sort -k1,1 -k2,3n \
-| bed_flat -  > obs
 echo \
-"chr@+	1	2
-chr@+	2	3
-chr@+	3	4
-chr@+	11	13
-chr@-	12	14" > exp
-check obs exp
-rm obs exp
-cat inp \
-| sort -k1,1 -k2,3n \
-| bed_flat -  > obs
+"chr	1	10	r1	1	+
+chr	3	13	r2	3	+
+chr	15	17	r3	100	+" > tmp.inp
 echo \
-"chr	1	2
-chr	2	3
-chr	3	4
-chr	11	12
-chr	12	13
-chr	13	14" > exp
-check obs exp
-rm obs exp inp
+"chr	1	3	r1,r2	1,3	+
+chr	3	10	r1,r2	1,3	+
+chr	10	13	r1,r2	1,3	+
+chr	15	17	r3	100	+" > tmp.exp
+
+echo "
+INPUT:
+	123      10 13
+	[         )
+          [          )  [ )
+"
+cat tmp.inp
+
+echo "
+OUTPUT:
+	[ )       [  )   
+	  [       )     [ )
+";
+cat tmp.exp
+echo "
+RESULT:"
+bed.flat tmp.inp > tmp.obs
+check tmp.obs tmp.exp
+rm tmp.obs tmp.exp tmp.inp
+
 }
-#test__bed_flat
 
 
 merge_by_gene(){

@@ -2,7 +2,49 @@
 . $HMHOME/src/root.sh
 . $HMHOME/src/bed.sh
 . $HMHOME/src/stat.sh
+asp.view(){
+usage="     
+USAGE: $FUNCNAME <genes.bed12> <reads.bed12>
+INPUT: genes (bed12) and reads (bed12)
 
+OUTPUT:
+            @
+           / \
+          *   #
+         / \ / \	
+    [    ]-[ ]-[   ]
+
+"
+	local tmpd=`mymktempd`;
+	mycat $1 > $tmpd/a
+	mycat $2 > $tmpd/b
+	bed.intron  $tmpd/b | bed.flank - 1 1 0 > $tmpd/j
+	run_R '
+		jc=read.table("'$tmpd/j'",header=F);
+		y=as.numeric(jc[,3]-jc[,2]);
+		x=jc[,2:3];
+		c=apply(x,1,mean);
+		xlim=c(min(x[,1]),max(x[,2]));
+		ylim=c(0,max(y));
+		png("out.png")
+		
+		plot(NULL,ylim=ylim,xlim=xlim);
+		segments(x[,1],0,c,y);
+		segments(c,y,x[,2],0);
+		
+		dev.off();
+	' log		
+
+}
+asp.view.test(){
+echo \
+"chr1	1000	2000	g1	0	+	1000	2000	0,0,0	3	100,100,100	0,500,900"> tmp.gene
+echo \
+"chr1   1050    1550    r1      1       +       1050    1550    255,0,0 2       50,50   0,450
+chr1   1050    1950    r1      1       +       1050    1950    255,0,0 2       50,50   0,850"> tmp.read
+asp.view tmp.gene tmp.read
+rm tmp.read tmp.gene
+}
 asp.spi(){
 usage=" $FUNCNAME <intron.bed6> <read.bed12> <opt>
 	<opt>: 0: null, 1:count on the same strand, 2: count on the opposite strand
@@ -34,18 +76,15 @@ usage=" $FUNCNAME <intron.bed6> <read.bed12> <opt>
 
 	rm -rf $tmpd;
 }
-join2(){
- 	join -a 1 -a 2 -o 0,1.2,1.3,2.2,2.3 -e 0 -j 1 $1 $2 | tr " " "\t"
-}
 
 asp.3ss(){ 
 usage=" $FUNCNAME <intron.bed6> <read.bed6> <window> <strand> 
 	<strand>: 0, 1(same strand), 2(opposite strand) 
-	<window>: window: <int>
-                     |---W----|---W---|
-	[    ]-----------un---[ sp         ]
-	OUTPUT: junction boundary (2W bps) in bed6 + #spliced + #unspliced 
-			    
+	<window>: windowsize for a and b boundaries 
+
+                     |---a---|---b---|
+	[    ]---------------[             ]
+	OUTPUT: intron.bed6 + a + b 
 "
 	if [ $# -lt 4 ];then echo "$usage"; return; fi
 	local S=${3/1/"-s"}; S=${S/2/"-S"};
@@ -59,8 +98,7 @@ usage=" $FUNCNAME <intron.bed6> <read.bed6> <window> <strand>
 	bed.flank $tmpd/a -1 $W 1 > $tmpd/a.s
 	bed.count $tmpd/a.u $tmpd/b $S | cut -f 4,7 | sort -u -k1,1 > $tmpd/x 	
 	bed.count $tmpd/a.s $tmpd/b $S | cut -f 4,7 | sort -u -k1,1 > $tmpd/y
-	join -a 1 -a 2 -e 0 -o 0,1.2,2.2 $tmpd/y $tmpd/x | tr " ;" "\t" \
-	| bed.flank - $(( $W - 1 )) $W 1
+	join -a 1 -a 2 -e 0 -o 0,1.2,2.2 $tmpd/x $tmpd/y | tr " ;" "\t" 
 	rm -rf $tmpd
 }
 3ss_v2(){ 
