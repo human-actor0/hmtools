@@ -12,6 +12,38 @@
 #atc28_rnaseq
 #)
 
+tophat2.run_single(){
+	RUN=${1:-bash}; ## put run command
+	TOPHAT2=${TOPHAT2:-tophat2}
+	if [ -z $NPROC  ] || \
+	   [ -z $BOWTIE2_IDX ] || \
+	   [ ! -x $TOPHAT2 ] || \
+	   [ -z $TRANSCRIPTOME_IDX ]; then 
+		echo "see usage"; return;
+	fi
+	for (( i=0; i<${#DATA[@]};i+=3 ));do
+		FQ1=${DATA[$i]};
+		OUT=${DATA[$i+1]};
+
+		echo "$FQ1 => $OUT/a.bam"
+		if [[ -f $FQ1 ]];then
+			echo "run .. $RUN"
+			cmd='
+				#!/bin/sh
+				#BSUB -n '$NPROC'
+				#BSUB -o bsub.out.%J
+				#BSUB -e bsub.err.%J
+				#BSUB -J tophat2_${n}
+				#mkdir -p $OUT
+				'$TOPHAT2' --no-coverage-search  --no-novel-juncs --no-novel-indels \
+					--transcriptome-index '$TRANSCRIPTOME_IDX' \
+					-p '$NPROC' \
+					-o '$OUT' '$BOWTIE2_IDX' '$FQ1' 
+			'
+			echo "$cmd" | eval "$RUN"
+		fi
+	done
+}
 tophat2.run_pair(){
 	RUN=${1:-bash}; ## put run command
 	TOPHAT2=${TOPHAT2:-tophat2}
