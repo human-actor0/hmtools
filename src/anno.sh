@@ -1,7 +1,11 @@
-#!/bin/bash
+#/bin/bash
 
 
-genename(){
+anno.genename(){
+usage=" $FUNCNAME <file>
+"
+if [ $# -ne 1 ];then echo "$usage";return; fi
+
         cat $1 | perl -e 'use strict;
                 my %eg=();
                 my $file=$ARGV[0];
