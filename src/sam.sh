@@ -11,7 +11,7 @@ sam.csize(){
 
 sam.fixchr(){
 usage="
-FUNCT: produce a sam file w/ correct chromosome names 
+FUNCT: produce a bam file correcting chromosome names 
 USAGE: $FUNCNAME <bam> <genome>
 	<genome> : hisat2_hg19
 "; if [ $# -ne 2 ]; then echo "$usage"; return; fi
