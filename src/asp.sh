@@ -103,7 +103,7 @@ asp.3ss(){
 usage=" 
  FUNCT: calculate 3SS statistics for each intron
  OUTPU: intron.bed6 a,b 1 - b/a
- USAGE: $FUNCNAME <intron.bed6> <read.bed6> <window> <strand> [<count>]
+ USAGE: $FUNCNAME <intron.bed6> <read.bed12> <window> <strand> [<count>]
 	<window>: windowsize for a and b boundaries 
 	<strand>: 0, 1(same strand), 2(opposite strand) 
 	<count> : 0: use as it is (default), 1: count as 1, 2: phred score
