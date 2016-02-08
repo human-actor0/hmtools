@@ -48,10 +48,11 @@ rm tmp.read tmp.gene
 asp.spi(){
 usage=" 
  FUNCT: Calculate SPI
- OUTPU: bed6 a,b,c 2*a/(b+c)
+ OUTPU: bed6 a,b,c a/(0.5*(b+c)+a)
  USAGE: $FUNCNAME <intron.bed6> <read.bed12> <strand> [<count>]
 	<strand>: 0: null, 1:count on the same strand, 2: count on the opposite strand
 	<count> : 0: use as it is (default), 1: count as 1, 2: phred score
+
 	               (a)	
 		_/     sp       \_
 	[    5'  ]--------------[   3'      ]
@@ -81,7 +82,7 @@ usage="
 	
 	join -a 1 -a 2 -e 0 -o 0,1.2,2.2 $tmpd/a $tmpd/b \
 	| join -a 1 -a 2 -e0 -o 0,1.2,1.3,2.2 - $tmpd/c \
-	| awk '{v=$3+$4; if(v==0){ v="inf";}else{ v=2*$2/v;}  print $1,$2,$3,$4,v;}' \
+	| awk '{ print $1,$2","$3","$4,$2/(0.5*($3+$4)+$2);}' \
 	| tr "@ " "\t"	
 
 	rm -rf $tmpd;
@@ -155,7 +156,7 @@ usage="
 
 	join -a 1 -a 2 -e 0 -o 0,1.2,2.2 $tmpd/a $tmpd/b \
 	| join -a 1 -a 2 -e 0 -o 0,1.2,1.3,2.2 - $tmpd/c \
-	| awk '{v=$3+4; if(v==0){ v="-inf";}else{ v=1 - $2/v;}  print $1,$2","$3+$4,v;}' \
+	| awk '{v=$3+$4; if(v==0){ v="-inf";}else{ v=1 - $2/v;}  print $1,$2","$3+$4,v;}' \
 	| tr "@ " "\t"
 	
 	rm -rf $tmpd
