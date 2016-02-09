@@ -2,6 +2,35 @@
 . $HMHOME/src/root.sh
 . $HMHOME/src/stat.sh
 
+bed.enc(){
+## encode bed6 in the name field 
+	cat $1 | awk -v OFS="\t" -v j=${2:-"@"} '{ n=$1;for(i=2;i<= 6;i++){ n=n j $(i);} $4=n; }1' 
+}
+
+
+bed.enc.test(){
+echo \
+"c	1	2	n	0	+	1	2	3" \
+| bed.enc -
+}
+
+bed.fixchr_hisat2_hg19(){
+	cat $1 | perl -ne 'chomp; my @a=split /\t/,$_;
+	if($a[0]=~/GL/){
+	}else{
+		$a[0]=~s/(\d+|MT|X|Y)/chr$1/g; 
+		$a[0]=~s/MT/M/g; 
+	}
+	print join ("\t",@a),"\n";'
+}
+
+bed.fixchr_hisat2_hg19.test(){
+echo \
+"1
+Y
+X
+MT" | bed.fixchr_hisat2_hg19 -
+}
 bed.sort(){
  	sort -i -k 1,1 -k 2n,2 $1 
 }
@@ -712,13 +741,13 @@ usage="$FUNCNAME [options] <bed6>
      [  )  [   )
         [  )
 "; if [ $# -lt 1 ]; then echo "$usage";exit; fi
-	bed.sort $1 | mergeBed -i stdin -d -1 -s -c 2,3,4,5 -o distinct,distinct,distinct,distinct \
+	bed.sort $1 | mergeBed -i stdin -d -1 -s -c 2,3,4,5 -o collapse,collapse,distinct,distinct \
 	| perl -ne ' chomp; my @a=split /\t/,$_; 
 		#print join("\t",@a),"\n";
 		my %h=();
 		my @s=split/,/,$a[4];
 		my @e=split/,/,$a[5];
-		if( scalar @s == 1){
+		if( scalar @s < 2 && scalar @e < 2){
 			print $a[0],"\t",$a[1],"\t",$a[2],"\t",$a[6],"\t",$a[7],"\t",$a[3],"\n";
 			next;
 		}
