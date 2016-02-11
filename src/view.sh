@@ -3,7 +3,150 @@
 . $HMHOME/src/root.sh
 #. $HMHOME/src/polya.sh
 . $HMHOME/src/asp.sh
+Rfuncs='
+	getrgb=function(x){ 
+		if(is.null(x)){
+			return(rgb(0,0,0));
+		}
+		x=as.integer(strsplit(as.character(x),",")[[1]]); 
+		y=x/255; 
+		return(rgb(y[1],y[2],y[3])); 
+	}
+	getv=function(k,x){ ## return value from key=value pair
+		i=grep(k,x);
+		if(length(i)==1){ return(gsub(k,"",x[i])); }
+		return(NULL);
+	}
+	draw_bedgraph=function(data,chrom,cstart,cend,color,main){
+		s=data[,2];e=data[,3]-1;c=data[,4];n=length(c);
+		x=c(s-0.1,s,e,e+0.1);
+		y=c(rep(0,n),c,c,rep(0,n));
+		ix=sort(x,index=T)$ix; x=x[ix];y=y[ix];
+		lines(x,y,col=color);
+		#plot(x,y,type="l",xlim=c(cstart,cend),col=color,main=main)
+	}
+	draw_genetrack=function(data,chrom,cstart,cend,main){
+		gene_track.n = nrow(data);
+		gene_track.top = gene_track.n;
+		gene_track.bot = 0;
+		gene_track.h = ((gene_track.top-gene_track.bot)/gene_track.n);
+		ylim=c(gene_track.bot, gene_track.top);
+		plot(NULL,main=paste(c(chrom,cstart,cend)),ylim=ylim,xlim=c(cstart,cend));
+		for( i in 1:gene_track.n){
+			s=data[i,2]; e=data[i,3]; st=data[i,6]; color=getrgb(data[i,9]);
+			ybot=gene_track.top - i*gene_track.h; ytop=ybot+gene_track.h/2;
+			lengths=as.integer(strsplit(as.character(data[i,11]),",")[[1]])
+			starts=as.integer(strsplit(as.character(data[i,12]),",")[[1]])
+			for (j in 1:data[i,10] ){
+				start=s+starts[j];	
+				end=start+lengths[j];
+				rect(start,ybot,end,ytop,col=color);
+				if (j < data[i,10]){
+					if ( st == "+"){
+						lines(c(end, starts[j+1] +s),c(ybot,ybot),col=color);
+					}else{
+						lines(c(end, starts[j+1] +s),c(ytop,ytop),col=color);
+					}
+				}
+			}
+		}
+	}
+	parse_track=function(file){
+		data=list();
+		con=file(file,"r");
+		line=readLines(con,n=1);
+		grange=NULL;
+		while(length(line) > 0){
+			if(line == ""){ line=readLines(con,n=1);next ;}
+			tmp=strsplit(line," ")[[1]]
+			## handle track
+			if( tmp[1] == "track"){
+				name=getv("name=",tmp); 
+				type=getv("type=",tmp);
+				color=getrgb(getv("color=",tmp));
+				data[[ name ]] = list(head=line,name=name,type=type,bed="",color=color); 
+			}else if( tmp[1] == "browser"){
+				a=strsplit(tmp[3],":")[[1]];
+				grange$chrom=a[1];
+				b=strsplit(a[2],"-")[[1]];
+				grange$start=as.integer(b[1]);
+				grange$end=as.integer(b[2]);
+			}else{
+				data[[ name ]]$bed = paste(data[[ name ]]$bed,line,sep="\n");
+			}
+			line=readLines(con,n=1);
+		}
+		close(con);
+		## min max
+		ylim=NULL; xlim=NULL;
+		for( n in names(data)){ 
+			bed=read.table(text=data[[n]]$bed);	
+			data[[n]]$df=bed;
+			tmp=c(min(bed[,2]),max(bed[,3]));
+			if(is.null(xlim)){  xlim=tmp;
+			}else{ xlim=c(min( xlim[1], tmp[1]), max(xlim[2],tmp[2]));} 
 
+			
+			if(ncol(bed) == 4){
+				tmp=c(min(bed[,4]),max(bed[,4]));
+				if(is.null(ylim)){ ylim=tmp;
+				}else{ ylim=c( min(ylim[1], tmp[1]),max(ylim[2],tmp[2]));}
+			}else{
+				ylim=c(0, nrow(bed));	
+			}
+		}
+		if( !is.null(grange)){ xlim=c(grange$start,grange$end);} 
+		return(list(track=data,grange=grange,xlim=xlim,ylim=ylim));
+	}
+'
+view.bedgraph(){
+usage="
+FUNCT: generate png plot from a bedGraph file
+USAGE: $FUNCNAME [options] <bedGraph>
+"
+	cat $1 | run_R "$Rfuncs"'
+	data=parse_track("stdin");
+	png("'$2'");
+	plot(NULL,xlim=data$xlim,ylim=data$ylim);
+	for( d in data$track){ 
+		draw_bedgraph(d$df,"chrom",data$xlim[1],data$xlim[2],d$color,"hi");
+	}
+	dev.off();
+	' log
+}
+view.bedgraph.test(){
+echo \
+'browser position c:0-1100
+track name=x type=bedGraph description="x" color=0,0,255,
+c	100	200	1
+c	200	300	2
+c	300	400	13
+c	700	1000	2' | view.bedgraph - tmp.png
+
+}
+view.gene(){
+	cat $1 | run_R "$Rfuncs"'
+		D=parse_track("stdin");
+		png(file="'$2'");
+		for( track in D$track){
+			if(is.null(D$grange)){ s= D$xlim[1]; e=D$xlim[2];}
+			else{
+				c=D$grange$chrom;
+				s=D$grange$start; 
+				e=D$grange$end;
+			}
+			draw_genetrack(track$df,c,s,e,"genes");
+		}
+		dev.off();
+	' log
+}
+view.gene.test(){
+echo \
+'track name=gene1 type=bed description="gene 1" color=0,0,255,
+chr1	0	100	n1	0	+	10	90	0,0,0	3	10,20,30	0,20,70
+chr1	0	100	n2	0	-	10	90	0,0,255	3	10,20,30	0,20,70' \
+| view.gene - tmp.png 
+}
 #datq=( $@ );
 #for f in ${@:2};do
 #        a=( `echo "$f" | tr ":" "\t"` )

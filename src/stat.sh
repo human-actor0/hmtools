@@ -1,5 +1,6 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
+
 stat.sum(){
 	cat $1 | perl -e 'use strict; my %res=();
 	while(<STDIN>){ chomp; my @a=split/\t/,$_;
@@ -9,34 +10,32 @@ stat.sum(){
 		print $k,"\t",$res{$k},"\n";
 	}'
 }
-
 stat.prep(){
 usage="
 FUNCT: make a merged table with headers 
-USAGE: $FUNCNAME <trt1>[,<trt2 ..]  <ctr1>[,<ctr2..] [log]
+USAGE: $FUNCNAME <ctr1>[,<ctr2>..] <trt1>[,<trt2 ..] [log]
 "; if [ $# -lt 2 ];then echo "$usage"; return; fi
-
-        trt=`echo $1 | tr "," " " | quote -`;
-        ctr=`echo $2 | tr "," " " | quote -`;
-	
-        run_R '
-                trt=c('$trt'); ctr=c('$ctr');
+	IFS=,; local trts=`quote $1`; local ctrs=`quote $2`; 
+	IFS=$' \t\n';
+        cmd='
+                trt=c('"$trts"'); ctr=c('"$ctrs"');
                 d=NULL;
                 for( i in 1:length(trt)){
                         tt=read.table(trt[i],header=F);
 			j=ncol(tt)-1;
-                        colnames(tt)=c("id",paste(paste("trt",i,sep=""),".c",1:j,sep="")); 
+                        colnames(tt)=c("id",paste(paste("ctr",i,sep=""),".c",1:j,sep="")); 
                         if( is.null(d)){ d=tt;
                         }else{ d=merge(d,tt,by="id",all=T); }
                 }
                 for( i in 1:length(ctr)){
                         tt=read.table(ctr[i],header=F);
-                        colnames(tt)=c("id",paste(paste("ctr",i,sep=""),".c",1:j,sep="")); 
+                        colnames(tt)=c("id",paste(paste("trt",i,sep=""),".c",1:j,sep="")); 
                         d=merge(d,tt,by="id",all=T);
                 }
 		d[ is.na(d) ] = 0;
 		write.table(file="stdout",d, col.names=T,quote=F,sep="\t", row.names=F);
-        ' ${3:-""} 
+        '
+	run_R "$cmd"  ${3:-""} 
 }
 
 stat.prep.test(){
@@ -250,6 +249,66 @@ check obs exp
 rm obs exp
 }
 #test__igx_to_igxnx
+
+stat.edger(){
+usage="
+FUNCT: calculate p-values 
+USAGE: $FUNCNAME <stat.prep> [<bcv>]
+"
+	## INPUT: comma separated control and treatment EI file ( bed6 + x + nx )
+	## OUTPUT: bed6 + logFC + pvalue 
+	local BCV=${2:-0.1}; # 0.4: human data, 0.1: genetically identical, 0.01: technical replicates (edgeRUsersGuide)
+	cat $1 | run_R '
+	tt=read.table("stdin",header=T);
+	cn=colnames(tt)[2:ncol(tt)];
+	group=rep(1,length(cn)); group[ grep("trt",cn)]=2;
+	event=rep(1,length(cn)); event[ grep(".c2",cn)]=2;
+	library(edgeR)
+	if( length(grep("trt",cn)) > 1 || length(grep("ctr",cn)) > 1){
+		bcv='"$BCV"';
+		y = DGEList(counts=tt[,2:3],group=c(2,1))
+		et = exactTest(y, dispersion=bcv^2)	
+		write.table(file="stdout",cbind(tt,et$table),quote=F,sep="\t",row.names=F);
+	}else{
+	
+	#ix=apply(D[,7:ncol(D)], 1, min) > 0 & apply(D[,7:ncol(D)],1,max) > 10
+		y=DGEList(counts=tt[,2:ncol(tt)],group=factor(group));
+		y=calcNormFactors(y);
+
+		event.this=factor(event);
+		group.this=factor(group);
+		H1 <- model.matrix(~ event.this + group.this + event.this:group.this, data=y$samples )
+		H0 <- model.matrix(~ event.this + group.this )
+		coef <- (ncol(H0)+1):ncol(H1)
+		#y=estimateCommonDisp(y)
+		#y=estimateTagwiseDisp(y, trend="movingave")
+		y = estimateGLMCommonDisp(y,H1);
+		y = estimateGLMTrendedDisp(y,H1);
+		y = estimateGLMTagwiseDisp(y,H1);
+
+		fit=glmFit(y$counts, H1, y$tagwise.dispersion,offset=0,prior.count=0)
+		llh=glmLRT(fit,coef=coef)
+
+		res=data.frame(tt, logFC=llh$table$logFC, pval=llh$table$PValue)
+		## chrom start end logFC pval
+		write.table(res,file="stdout", col.names=T,row.names=F,sep="\t",quote=F);
+	}
+	' 
+}
+stat.edger.test(){
+echo \
+"id	trt1.c1	trt1.c2	trt2.c1	trt2.c2	ctr1.c1	ctr1.c2
+a	1	10	11	10	11	10
+b	2	20	22	20	22	20
+c	3	30	33	30	33	30" | stat.edger -
+
+echo \
+"id	trt1.c1	trt1.c2	ctr1.c1	ctr1.c2
+a	1	10	11	10
+b	2	20	22	20
+c	3	30	33	30" | stat.edger -
+}
+
 stat.edger_test(){
 	## INPUT: comma separated control and treatment EI file ( bed6 + x + nx )
 	## OUTPUT: bed6 + logFC + pvalue 

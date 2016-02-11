@@ -1,5 +1,7 @@
 #!/bin/bash
 
+IFS=$' \n\t';
+
 ## check executive files
 bedGraphToBigWig(){
 	$HMHOME/bin/bedGraphToBigWig $@
@@ -67,12 +69,14 @@ usage: $FUNCNAME <Rscript> [flag]
 "
         cmd=$1;
 	local tmpd=`mymktempd`;
-        cmd=${cmd/stdout/$tmpd/out}
+        cmd=${cmd//stdout/$tmpd/out}
 
         echo "$cmd" > $tmpd/cmd
         R --no-save -q -f $tmpd/cmd &> $tmpd/log;
 	if [ -f $tmpd/out ];then
 		cat $tmpd/out
+	else
+		cat $tmpd/log
 	fi
 	local flag=${2:-""};
 
@@ -81,9 +85,10 @@ usage: $FUNCNAME <Rscript> [flag]
 	fi
 	rm -rf $tmpd;
 }
+unset -f quote
 quote(){
-	local del=${2:-","};
-	perl -ne 'chomp; print join("'$del'", map{ "\"$_\"" } split( /\s+/,$_ )),"\n"';
+	#perl -ne 'chomp; print join("'$del'", map{ "\"$_\"" } split( /\s+/,$_ )),"\n"';
+	local a=( ${@/,/" "} ); a=( "${a[@]/#/\"}" ); a=( "${a[@]/%/\"}" ); echo "${a[*]}"
 }
 
 # array=( "${array[@]/%/_content}" )

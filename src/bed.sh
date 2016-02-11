@@ -463,7 +463,7 @@ check exp obs
 rm -f tmpa tmpb exp obs
 }
 
-bede_join(){
+bed.join(){
 	echo "$@" | perl -e '
 		use strict;
 		my @files=split /\s+/,<STDIN>;
@@ -485,17 +485,28 @@ bede_join(){
 			$i++;
 		}
 		foreach my $k (keys %data){
-			print $k,"\t";
+			print $k;
 			for(my $i=0; $i < $n; $i++){
-				if(defined $data{$k}{$i}){
-					print "\t",$data{$k}{$i};
-				}else{
-					print "\t",join("@",( 0 ) x $nc{$i});	
-				}
+				print "\t", defined $data{$k}{$i}? $data{$k}{$i} : join("\t",( "null" ) x $nc{$i}) ;
 			}
 			print "\n";
 		}
 	' | tr "@" "\t"
+}
+bed.join.test(){
+echo \
+"c	1	2	n1	0	+	1	2,2
+c	2	3	n2	0	+	3	4,4" > tmp.a
+echo \
+"c	1	2	n1	0	+	10	20,20
+c	2	3	n2	0	+	30	40,40
+c	3	4	n3	0	+	50	60,60" > tmp.b
+echo \
+"c	3	4	n3	1000	+	0	1000
+c	2	3	n2	100	+	100	0
+c	1	2	n1	11	+	1	10" > tmp.exp
+bed.join tmp.a tmp.b  #> obs
+rm tmp.*
 }
 
 bed.flank(){
