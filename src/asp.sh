@@ -178,27 +178,28 @@ echo "==> result"
 asp.3ss(){ 
 usage=" 
  FUNCT: calculate 3SS statistics for each intron
- OUTPU: intron.bed6 a,b 1 - b/a
+ OUTPU: intron.bed6 a,b,c  1-a/(b+c)
  USAGE: $FUNCNAME <intron.bed6> <read.bed12> <window> <strand> [<count>]
 	<window>: windowsize for a and b boundaries 
 	<strand>: 0, 1(same strand), 2(opposite strand) 
 	<count> : 0: use as it is (default), 1: count as 1, 2: phred score
-
 
 # >>>>> : read
 # >>>>>----->>>>> : splicing read
 # [     ] : exon
 # ------- : intron
 # |-----| : predefined window (e.g., 25bp)
+# _/   \_ : junction counts
 
-# 3SS = 1- #(a)/#(b), [-inf, 1]
 
-                         |--(a)--|--(b)--|
+               _/     (c)       \_
  [  5' exon    ]-----------------[   3' exon     ]
+                         |--(a)--|--(b)--|
+
                      >>>>>      >>>>>           (support a)
                                  >>>>>   >>>>>  (support b)
-          >>>>>>----------------->>>>>>         (support b)
-             >>>>>>-------------->>>>>>         (support b or not)
+          >>>>>>----------------->>>>>>         (support c)
+             >>>>>>-------------->>>>>>         (support none)
           >>>>>>--------------------->>>>>>     (support none)
 
 "
@@ -220,13 +221,12 @@ usage="
 		| cut -f4,11 | stat.sum - | sort -k1,1 > $tmpd/b 	
 
 	bed.intron $tmpd/r.2 \
-		| intersectBed -a $tmpd/i -b stdin $S -wa -wb \
-		| awk '$6=="+" && $9==$3 || $6=="-" && $8==$2' \
+		| intersectBed -a $tmpd/i -b stdin $S -wa -wb -f 1 -F 1 \
 		| cut -f 4,11 | stat.sum - | sort -k1,1 > $tmpd/c
 
 	join -a 1 -a 2 -e 0 -o 0,1.2,2.2 $tmpd/a $tmpd/b \
 	| join -a 1 -a 2 -e 0 -o 0,1.2,1.3,2.2 - $tmpd/c \
-	| awk '{v=$3+$4; if(v==0){ v="-inf";}else{ v=1 - $2/v;}  print $1,$2","$3+$4,v;}' \
+	| awk '{v=$3+$4; if(v==0){ v="-inf";}else{ v=1 - $2/v;}  print $1,$2","$3","$4,v;}' \
 	| tr "@ " "\t"
 	
 	rm -rf $tmpd
