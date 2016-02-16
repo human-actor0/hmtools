@@ -1,5 +1,36 @@
 . $HMHOME/src/bed.sh
 
+bruseq.pol2sim(){
+usage="
+FUNCT: generate intervals of pol2 shape
+USAGE: $FUNCNAME <bed>
+"
+
+
+}
+
+bruseq.543(){
+usage="
+FUNCT: generate variable bin counts
+USAGE: $FUNCNAME <target.bed> <read.bed12> <strand> <config>
+ <config> :  [<5>, <4>, <3>]
+  <5>   : [<up>,<dn>,<m>]
+   <up> : upstream boundary
+   <dn> : downstream boundary
+   <m>  : f<b>|v<b> 
+    f<b>: bins with a constant size <b>
+    v<b>: <b> bins with variable sizes
+
+
+            5'==[      ]--------[       ]---------------[         ]======3'
+   |   5.up  | 5.dn      |                4              |    3.up       |    3.dn       |
+"
+}
+bruseq.543.test(){
+echo \
+"chr1	1000	2000	n1	0	+" > tmp.target
+}
+
 bruseq.bedgraph(){
 usage="
 FUNCT:  count the number of intervals overlapping with fixed bins

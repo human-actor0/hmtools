@@ -8,6 +8,7 @@ USAGE: $FUNCNAME <fa> <bed> [options]
  [options]: 
 	-s : reverse complements for the negative strand
 	-i : ignore case 
+	-uc : upper case
 
 "
 local option=${@:3};
