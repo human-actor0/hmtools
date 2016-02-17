@@ -129,7 +129,7 @@ usage="
                _(b)_          _(c)_
 "
 	if [ $# -lt 3 ];then echo "$usage"; return; fi
-	local S=${3/1/"-s"}; S=${S/2/"-S"};
+	local S=${3/1/"-s"}; S=${S/2/"-S"}; S=${S/0/""};
 	local tmpd=`mymktempd`; 
 	#local tmpd=tmpd; rm -rf $tmpd; mkdir -p $tmpd
 	mycat $1 | bed.enc - > $tmpd/i
@@ -205,7 +205,7 @@ usage="
 "
 	if [ $# -lt 4 ];then echo "$usage"; return; fi
 	local W=$3;
-	local S=${4/1/"-s"}; S=${S/2/"-S"};
+	local S=${4/0/""}; S=${S/1/"-s"}; S=${S/2/"-S"};
 
 	local tmpd=`mymktempd`;
 	mycat $1 | bed.enc - > $tmpd/i 
