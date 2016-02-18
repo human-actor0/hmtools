@@ -2,6 +2,91 @@
 
 IFS=$' \n\t';
 
+
+crop_prefix(){
+# obtained from http://www.alecjacobson.com/weblog/?p=141
+# and modified here
+	if [ "$#" -eq 0 ] || [ "$1" = "-" ];then
+		local input=`cat $1 | tr " \t" "\n" | awk 'NF'`;
+	else
+		local input=`echo $@ | tr " \t" "\n" | awk 'NF'`;
+	fi
+	local longest=$(echo "$input" | wc -L)
+	local count=$(echo "$input" | wc -l)
+	local prefix=1
+	if [ $count -gt 1 ]; then
+		for i in $(seq $longest); do
+			[ $(echo "$input" | uniq -w$i | wc -l) -eq 1 ] || break
+			prefix=$(($prefix+1))
+		done
+	fi
+	echo "$input" | cut -c$prefix-
+}
+
+crop_prefix.test(){
+	crop_prefix abc abd abcef   
+	echo "abc abd abcef" | crop_prefix -
+}
+myjoin(){
+if [ $# -lt 1 ] || [ $1 = "-" ] ;then 
+echo " usage: $FUNCNAME <file> [<file>..] "; return;
+fi
+	local empty="NA";
+	local sep="@";
+	local names=`crop_prefix $@ | tr "\n" " "`;
+        echo "$@" | perl -e '
+                use strict;
+		my $sep="'$sep'";
+                my @files=split /\s+/,<STDIN>;
+                my @names=split /\s+/,"'"$names"'";
+                my $i=0;
+                my $n=scalar @files;
+                my %data=();
+                my %nc = ();
+                foreach my $f (@files){
+                        open my $in, "<", $f or die "$f not exists";
+                        while(<$in>){ chomp; my @a=split/\t/,$_;
+                                my $k= $a[0]; 
+                                my $v= join($sep,@a[1..$#a]);
+                                $data{$k}{$i}=$v;
+                                if(!defined $nc{$i}){
+                                        $nc{$i} = $#a;
+                                }
+                        }
+                        close($in);
+                        $i++;
+                }
+		print "id";
+		for(my $i=0; $i < $n; $i++){
+		for(my $j=0; $j < $nc{$i}; $j++){
+			print "\t",$names[$i],".",$j;
+		}}
+		print "\n";
+                foreach my $k (keys %data){
+                        print $k;
+                        for(my $i=0; $i < $n; $i++){
+                                print "\t", defined $data{$k}{$i}? $data{$k}{$i} : join("\t",( "'$empty'" ) x $nc{$i}) ;
+                        }
+                        print "\n";
+                }
+        ' | tr "$sep" "\t"
+}
+
+myjoin.test(){
+echo \
+"a	1	2
+c	5	6
+b	3	4" > tmp.a
+echo \
+"a	10	20	30
+b	30	40	50" > tmp.b
+echo \
+"a	1
+b	2" > tmp.c
+	myjoin tmp.*
+	rm tmp.*
+}
+
 ## check executive files
 bedGraphToBigWig(){
 	$HMHOME/bin/bedGraphToBigWig $@
