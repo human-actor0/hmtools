@@ -131,6 +131,7 @@ usage="
 	if [ $# -lt 3 ];then echo "$usage"; return; fi
 	local S=${3/1/"-s"}; S=${S/2/"-S"}; S=${S/0/""};
 	local tmpd=`mymktempd`; 
+	touch $tmpd/a $tmpd/b $tmpd/c $tmpd/r.1 $tmpd/r.2
 	#local tmpd=tmpd; rm -rf $tmpd; mkdir -p $tmpd
 	mycat $1 | bed.enc - > $tmpd/i
 	bed.5p $tmpd/i > $tmpd/i.5
@@ -208,18 +209,18 @@ usage="
 	local S=${4/0/""}; S=${S/1/"-s"}; S=${S/2/"-S"};
 
 	local tmpd=`mymktempd`;
+	touch $tmpd/a $tmpd/b $tmpd/c $tmpd/r.1 $tmpd/r.2
+
 	mycat $1 | bed.enc - > $tmpd/i 
 	bed.3p $tmpd/i | bed.flank - $(( $W -1 )) 0 1  > $tmpd/i.a
 	bed.3p $tmpd/i | bed.flank - -1 $W 1 > $tmpd/i.b 
 	mycat $2 | bed.score - ${5:-"0"} \
 		| awk -v OFS="\t" -v O=$tmpd/r '{ n=1; if($10 > 1){ n=2;} print $0 >> O"."n; }'
-
 	intersectBed -a $tmpd/i.a -b $tmpd/r.1 $S -wa -wb \
 		| cut -f4,11 | stat.sum - | sort -k1,1 > $tmpd/a 	
 	intersectBed -a $tmpd/i.b -b $tmpd/r.1 $S -wa -wb \
 		| awk '$6=="+" && $8>=$2 || $6=="-" && $9<=$3' \
 		| cut -f4,11 | stat.sum - | sort -k1,1 > $tmpd/b 	
-
 	bed.intron $tmpd/r.2 \
 		| intersectBed -a $tmpd/i -b stdin $S -wa -wb -f 1 -F 1 \
 		| cut -f 4,11 | stat.sum - | sort -k1,1 > $tmpd/c
