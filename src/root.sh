@@ -28,11 +28,27 @@ crop_prefix.test(){
 	echo "abc abd abcef" | crop_prefix -
 }
 myjoin(){
-if [ $# -lt 1 ] || [ $1 = "-" ] ;then 
-echo " usage: $FUNCNAME <file> [<file>..] "; return;
-fi
+usage="
+usage: $FUNCNAME [options] <file> [<file>..] 
+ [options]:
+	-d <str> : delimitor (default @)
+	-e <str> : replace empty input with <str> (default NA)
+";
+
 	local empty="NA";
 	local sep="@";
+	local OPTIND
+	while getopts ":d:e:" opt; do
+	case $opt in
+		d) sep=$OPTARG;;
+		e) empty=$OPTARG;;
+		\?) echo "Invalid option -$OPTARG"; return;;
+	esac
+	done
+	shift $(( $OPTIND -1 ));
+	if [ $# -lt 1 ] || [ $1 = "-" ] ;then 
+		echo "$usage"; return;
+	fi
 	local names=`crop_prefix $@ | tr "\n" " "`;
         echo "$@" | perl -e '
                 use strict;
@@ -70,6 +86,7 @@ fi
                         print "\n";
                 }
         ' | tr "$sep" "\t"
+	OPTIND=$optind
 }
 
 myjoin.test(){
@@ -83,7 +100,7 @@ b	30	40	50" > tmp.b
 echo \
 "a	1
 b	2" > tmp.c
-	myjoin tmp.*
+	myjoin -d "," tmp.*
 	rm tmp.*
 }
 
