@@ -46,6 +46,61 @@ asp.view tmp.gene tmp.read
 rm tmp.read tmp.gene
 }
 
+asp.plot_scatter(){
+usage="$FUNCNAME [options] <spi|3ss> <spi|3ss>
+ [options]:
+        -s <int> : minimum counts
+        -o <str.png> : output png file (default: out.png)
+"
+        local thre=100;
+        local fpng="out.png";
+        local OPTIND;
+        while getopts ":s:o:" arg; do
+                case $arg in
+                        s) thre=${OPTARG};;
+                        o) fpng=${OPTARG};;
+                        \?) echo "Invalid -${OPTARG}"; return;;
+                esac
+        done
+        shift $(( $OPTIND - 1 ))
+        if [ $# -ne 2 ];then echo "$usage"; return; fi
+
+        local tmpd=`mymktempd`;
+        for f in $@;do
+                local n=${f##*/};
+                bed.enc $f | cut -f 4,7- | tr "," "\t" \
+                | awk -v thre=$thre -v OFS="\t" '$2 + $3 + $4 > thre{ print $1,$5;}'\
+                > $tmpd/$n
+        done
+
+        myjoin -d ";" $tmpd/* \
+        | run_R '
+        library(MASS);
+        library(ggplot2);
+        tt=read.table("stdin",header=T);
+        xlab=colnames(tt)[2];
+        ylab=colnames(tt)[3];
+        print(ylab);
+        tt=tt[apply(tt[,-1],1,function(x){ sum(is.na(x))==0;}),];
+        tt[ tt < 0]=0;
+        x=tt[,2];y=tt[,3];
+        DF= data.frame(x,y);
+        dens = kde2d(x,y);
+        gr = data.frame(with(dens, expand.grid(x,y)), as.vector(dens$z));
+        names(gr) = c("xgr", "ygr", "zgr");
+        mod = loess(zgr~xgr*ygr, data=gr);
+        DF$pointdens = predict(mod, newdata=data.frame(xgr=x, ygr=y));
+        p=ggplot(DF, aes(x=x,y=y, color=pointdens)) + geom_point() +  xlab(xlab) + ylab(ylab);
+	p=p + geom_hline(aes(yintercept=median(y)))
+	p=p + geom_vline(aes(xintercept=median(x)))
+        png("'$fpng'");
+        print(p);
+        dev.off();
+        '
+        rm -rf $tmpd;
+}
+
+
 asp.prep(){
 usage="
 FUNCT: convert bed6+ to id+ form
@@ -56,7 +111,7 @@ if [ $# -lt 2 ];then echo "$usage";return; fi
 	for f in `echo $1 | tr "," " "`;do
 		i=$(( $i + 1 ));
 		if [ $2 == "3ss" ];then
-			bed.enc $f | awk -v OFS="\t" '{ split($7,a,","); print $4,a[1],a[2];}' > $3.$i;
+			bed.enc $f | awk -v OFS="\t" '{ split($7,a,","); print $4,a[1],a[2]+a[3];}' > $3.$i;
 		elif [ $2 == "spi" ];then
 			bed.enc $f | awk -v OFS="\t" '{ split($7,a,","); print $4,a[2]+a[3],a[1];} ' > $3.$i;
 		fi
@@ -64,11 +119,11 @@ if [ $# -lt 2 ];then echo "$usage";return; fi
 }
 asp.prep.test(){
 echo \
-"chr1	1	2	n1	0	+	1,3	0.6" > tmp.3ss.ctr1
+"chr1	1	2	n1	0	+	1,3,1	0.6" > tmp.3ss.ctr1
 echo \
-"chr1	1	2	n1	0	+	3,1	0.3" > tmp.3ss.trt1
+"chr1	1	2	n1	0	+	3,1,1	0.3" > tmp.3ss.trt1
 echo \
-"chr1	1	2	n1	0	+	3,2	0.2" > tmp.3ss.trt2
+"chr1	1	2	n1	0	+	3,2,1	0.2" > tmp.3ss.trt2
 asp.prep tmp.3ss.trt1,tmp.3ss.trt2 3ss tmp.3ss.trt
 head tmp.3ss*
 rm tmp.*	
@@ -98,11 +153,11 @@ if [ $# -lt 4 ];then echo "$usage"; return; fi
 
 asp.cmp.test(){
 echo \
-"chr1	1	2	n1	0	+	1,3	0.6" > tmp.3ss.ctr1
+"chr1	1	2	n1	0	+	1,3,1	0.6" > tmp.3ss.ctr1
 echo \
-"chr1	1	2	n1	0	+	3,1	0.3" > tmp.3ss.trt1
+"chr1	1	2	n1	0	+	3,1,1	0.3" > tmp.3ss.trt1
 echo \
-"chr1	1	2	n1	0	+	3,2	0.2" > tmp.3ss.trt2
+"chr1	1	2	n1	0	+	3,2,1	0.2" > tmp.3ss.trt2
 asp.cmp tmp.3ss.ctr1 tmp.3ss.trt1,tmp.3ss.trt2 3ss edger
 
 echo \
