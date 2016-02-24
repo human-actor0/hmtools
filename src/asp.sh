@@ -188,7 +188,7 @@ usage="
 	local tmpd=`mymktempd`; 
 	touch $tmpd/a $tmpd/b $tmpd/c $tmpd/r.1 $tmpd/r.2
 	#local tmpd=tmpd; rm -rf $tmpd; mkdir -p $tmpd
-	mycat $1 | bed.enc - > $tmpd/i
+	mycat $1 | bed.enc - | sort -u > $tmpd/i
 	bed.5p $tmpd/i > $tmpd/i.5
 	bed.3p $tmpd/i > $tmpd/i.3
 	mycat $2 | bed.score - ${4:-"0"} \
@@ -266,7 +266,7 @@ usage="
 	local tmpd=`mymktempd`;
 	touch $tmpd/a $tmpd/b $tmpd/c $tmpd/r.1 $tmpd/r.2
 
-	mycat $1 | bed.enc - > $tmpd/i 
+	mycat $1 | bed.enc - | sort -u > $tmpd/i 
 	bed.3p $tmpd/i | bed.flank - $(( $W -1 )) 0 1  > $tmpd/i.a
 	bed.3p $tmpd/i | bed.flank - -1 $W 1 > $tmpd/i.b 
 	mycat $2 | bed.score - ${5:-"0"} \
