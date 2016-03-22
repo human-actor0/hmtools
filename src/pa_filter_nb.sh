@@ -195,6 +195,7 @@ program='
 		my @classes = sort {$a<=>$b} keys %$M;
 		while(<>){ chomp;
 			my ($id,$seq) = split /\t/,$_;
+			$seq=uc $seq;
 			my @res_x=();
 			my @res_y=();
 

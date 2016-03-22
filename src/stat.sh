@@ -1,6 +1,102 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
 
+stat.rfuncs(){
+echo '
+	calc_ks=function(x,y){
+		x[is.na(x)]=0; y[is.na(y)]=0;
+		if( sum(x)==0 || sum(y)==0){ return(0);}	
+		x=cumsum(x);x.n=x[length(x)];
+		y=cumsum(y);y.n=y[length(y)]; 
+		z=max(abs(x/x.n - y / y.n));
+		return(z);
+	}
+	sam=function(x,n){
+		return(matrix( unlist(lapply(x,function(x){ rpois(n,x);})), nrow=n,byrow=F));
+	}
+	sim=function(x,y,n){
+		x.s=sam(x,n);
+		y.s=sam(y,n);
+		apply(cbind(x.s,y.s),1,function(x){
+			n=length(x);	
+			ks=calc_ks(x[1:(n/2)],x[(n/2+1):n]);
+			return(ks);
+		})
+	}
+	ks_sim=function(x,y,N){
+		ks0=calc_ks(x,y);
+		a=sum(x)/(sum(x)+sum(y));
+		ks1=sim((x+y)*a,(x+y)*(1-a),N); ## null model
+		pval=(sum( ks1 >= ks0)/N); ## false positives
+		return(list(ks=ks0,pval=pval,power=NA));
+	}
+	
+	mymerge=function(files,names,FUN){
+		res=NULL;
+		for(i in 1:length(files)){
+			tt=read.table(files[i],header=T);
+			if(!is.null(FUN)){
+				tt=FUN(tt);
+			}
+			cn=colnames(tt);
+			colnames(tt)=c(cn[1], paste(names[i],cn[2:length(cn)],sep="."));
+			if(is.null(res)){       
+				res=tt;
+			}else{
+				res=merge(res,tt,by=1,all=T);
+			}
+		}
+		return(res);    
+	}
+
+'
+}
+
+stat.bc(){
+usage="
+FUNCT: compare bin count patterns
+USAGE: $FUNCNAME <ctr.file> <trt.file>
+	*.file : three columns (start end count)
+"
+	cmd=`stat.rfuncs`'
+		method="'$2'"
+		N=10000;
+		tt=read.table("stdin",header=T);
+		d=tt[sort(tt$start,decreasing=F,index=T)$ix,];
+		res=ks_sim(d$count.1,d$count.2,N)
+		write.table(file="stdout",as.data.frame(res),col.names=F,row.names=F,sep="\t",quote=F);
+	' 
+	run_R "$cmd" 
+}
+stat.bc.test(){
+echo \
+"start	end	count.1	count.2
+1	2	1	3
+3	4	2	2
+5	6	3	1" | stat.bc - "ks"
+echo \
+"start	end	count.1	count.2
+1	2	10	30
+3	4	20	20
+5	6	30	10" | stat.bc - "ks"
+echo \
+"start	end	count.1	count.2
+1	2	1	2
+3	4	2	3
+5	6	3	4" | stat.bc - "ks"
+echo \
+"start	end	count.1	count.2
+1	2	10	20
+3	4	20	30
+5	6	30	40" | stat.bc - "ks"
+echo \
+"start	end	count.1	count.2
+1	2	100	200
+3	4	200	300
+5	6	300	400" | stat.bc - "ks"
+
+}
+
 stat.sum(){
 	cat $1 | perl -e 'use strict; my %res=();
 	while(<STDIN>){ chomp; my @a=split/\t/,$_;
@@ -383,7 +479,7 @@ b	2	20	22	20	22	20
 c	3	30	33	30	33	30" | stat.edger_test -
 }
 
-padjust(){
+stat.padjust(){
 usage="
 usage: $FUNCNAME <file> <pvalue_index>
 "

@@ -2,6 +2,80 @@
 . $HMHOME/src/root.sh
 . $HMHOME/src/stat.sh
 
+bed.rm_transcriptid(){
+	cat $1 | perl -ne '$_=~s/ENST\d+\|//g;print $_;'
+}
+bed.longestgene(){
+usage="$FUNCNAME <bed>"
+	awk -v OFS="\t" '{ print $1","$4","$6, $2, $3;}' $1 | bed.sort - | mergeBed \
+	| tr "," "\t" | awk -v OFS="\t" '{ print $1,$4,$5,$2,0,$3;}'
+}
+bed.3utr(){
+usage="$FUNCNAME <bed12>"
+if [ $# -lt 1 ];then echo "$usage"; return; fi
+	#$chr,,$start,,$end,,$name,,$score,,$strand,,$thickStart,,$thickEnd,,$itemRgb,,$blockCount,;
+	awk -v OFS="\t" '{
+		split($11,l,",");
+		split($12,s,",");
+		coding=1;
+		if( $7 == $8) coding=0; ## noncoding or pseudo genes
+		if($6=="+"){
+			start=$2+s[$10]; end=start+l[$10];
+			if(coding) start=$8;
+		}else{
+			start=$2; end=start+l[1]; 
+			if(coding) end=$7;
+		}
+		#if(coding && end > start) ## remove coding end points
+			print $1,start,end,$4,$5,$6;
+	}' $1 | sort -u;
+}
+
+bed.split_byname(){
+usage="$FUNCNAMME <bed> <regexp> <outdir>"
+	mkdir -p $3;
+	awk -v OFS="\t" -v P=$2 -v O=${3%\/} '{
+		if( match($4, P) ){
+			fout=O"/"substr($4, RSTART, RLENGTH);	
+		}else{
+			fout="unmatched"
+		}
+		print $0 >> fout;
+	}'
+
+}
+bed.split_byname.test(){
+echo \
+"chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_65_2595_11275#0/1:3      1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_65_17804_11855#0/1:3     1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_65_11243_13347#0/1:3     1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_65_11758_14122#0/1:3     1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_65_3727_15508#0/1:3      1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_65_15214_17090#0/1:3     1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_65_6123_17408#0/1:3      1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_65_4277_18922#0/1:3      1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_65_14990_19089#0/1:3     1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_65_15258_20539#0/1:3     1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_66_5245_5815#0/1:3       1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_66_3175_6181#0/1:3       1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_66_2987_9277#0/1:3       1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_66_10707_9568#0/1:3      1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_66_15448_9689#0/1:3      1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_66_6414_11833#0/1:3      1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_66_4448_14020#0/1:3      1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_66_3292_14094#0/1:3      1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_66_9195_14417#0/1:3      1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_66_11379_14710#0/1:3     1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_66_15898_14801#0/1:3     1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_66_3091_15635#0/1:3      1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_66_11942_18879#0/1:3     1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_67_3422_3008#0/1:3       1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_67_12893_3381#0/1:3      1       +
+chr1    566134  566170  ILLUMINA-545855_0057_FC64GE8_3_67_11230_5422#0/1:3      1       +" \
+| bed.split_byname - 'ILLUMINA-545855_0057_FC64GE8_3_..' tmp/
+head tmp/*
+}
+
 bed.enc(){
 ## encode bed6 in the name field 
 	cat $1 | awk -v OFS="\t" -v j=${2:-"@"} '{ n=$1;for(i=2;i<= 6;i++){ n=n j $(i);} $4=n; }1' 
@@ -821,55 +895,37 @@ merge_by_gene(){
         | mergeBed -i stdin -s -c 4,5,6 -o distinct,count,distinct \
         | awk -v OFS="\t" '{ split($1,a,"@");$1=a[1];print $0;}'
 }
-bed12_to_3utr(){
-	#$chr,,$start,,$end,,$name,,$score,,$strand,,$thickStart,,$thickEnd,,$itemRgb,,$blockCount,;
-	awk -v OFS="\t" '{
-		split($11,l,",");
-		split($12,s,",");
-		coding=1;
-		if( $7 == $8) coding=0; ## noncoding
-		if($6=="+"){
-			start=$2+s[$10]; end=start+l[$10];
-			if(coding) start=$8;
-		}else{
-			start=$2; end=start+l[$10]; 
-			if(coding) end=$7;
-		}
-		if(coding && end > start) ## remove coding end points
-			print $1,start,end,$4,$5,$6;
-	}' $1;
-}
 
-ucsc_to_bed12(){
-	cmd='
-	    chomp;
-	    my @aa = split /\t/,$_;
-	    my ($bin,$name,$chr,$strand,$start,$end,$thickStart,$thickEnd,$blockCount,$blockStarts,$blockEnds,$id,$name2) = split /\t/, $_;
-	    my $itemRgb = "255,0,0";
-	    my $score = 0;
-		print $blackCount,"\n"; exit;
-
-	    if(defined $name2){
-		$name = $name."|".$name2;
-	    }
-	    print $chr,"\t",$start,"\t",$end,"\t",$name,"\t",$score,"\t",$strand,"\t",$thickStart,"\t",$thickEnd,"\t",$itemRgb,"\t",$blockCount,"\t";
-	    my @ss = split /,/,$blockStarts;
-	    my @ee = split /,/,$blockEnds;
-	    for(my $i=0;$i<$blockCount;$i++){
-		my $length = $ee[$i]-$ss[$i];
-		print $length,",";
-	    }
-	    print "\t";
-	    for(my $i=0;$i<$blockCount;$i++){
-		my $relstart = $ss[$i]-$start;
-		print $relstart,",";
-	    }
-	    print "\n";
-	'
-	mycat $1 | perl -ne "$cmd";
-
-}
-
+#ucsc_to_bed12(){
+#	cmd='
+#	    chomp;
+#	    my @aa = split /\t/,$_;
+#	    my ($bin,$name,$chr,$strand,$start,$end,$thickStart,$thickEnd,$blockCount,$blockStarts,$blockEnds,$id,$name2) = split /\t/, $_;
+#	    my $itemRgb = "255,0,0";
+#	    my $score = 0;
+#		print $blackCount,"\n"; exit;
+#
+#	    if(defined $name2){
+#		$name = $name."|".$name2;
+#	    }
+#	    print $chr,"\t",$start,"\t",$end,"\t",$name,"\t",$score,"\t",$strand,"\t",$thickStart,"\t",$thickEnd,"\t",$itemRgb,"\t",$blockCount,"\t";
+#	    my @ss = split /,/,$blockStarts;
+#	    my @ee = split /,/,$blockEnds;
+#	    for(my $i=0;$i<$blockCount;$i++){
+#		my $length = $ee[$i]-$ss[$i];
+#		print $length,",";
+#	    }
+#	    print "\t";
+#	    for(my $i=0;$i<$blockCount;$i++){
+#		my $relstart = $ss[$i]-$start;
+#		print $relstart,",";
+#	    }
+#	    print "\n";
+#	'
+#	mycat $1 | perl -ne "$cmd";
+#
+#}
+#
 
 
 

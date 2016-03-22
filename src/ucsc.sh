@@ -35,6 +35,7 @@ else
 fi
 }
 
+
 ucsc.ens2genename(){
 usage=" $FUNCNAME <file>
 "
@@ -105,31 +106,29 @@ rm -rf tmp.bedGraph tmp.bw
 }
 
 ucsc.url(){
-	$HMOME/bin/ucsc_url.pl $@
+	$HMHOME/bin/ucsc_url.pl $@
 }
 ucsc.bed12(){
-	mycat $1 perl -ne '
+	mycat $1 | perl -ne '
 	    chomp;
 	    my @aa = split /\t/,$_;
 	    my ($bin,$name,$chr,$strand,$start,$end,$thickStart,$thickEnd,$blockCount,$blockStarts,$blockEnds,$id,$name2) = split /\t/, $_;
 	    my $itemRgb = "255,0,0";
 	    my $score = 0;
-		print $blackCount,"\n"; exit;
-
 	    if(defined $name2){
-		$name = $name."|".$name2;
+	        $name = $name."|".$name2;
 	    }
 	    print $chr,"\t",$start,"\t",$end,"\t",$name,"\t",$score,"\t",$strand,"\t",$thickStart,"\t",$thickEnd,"\t",$itemRgb,"\t",$blockCount,"\t";
 	    my @ss = split /,/,$blockStarts;
 	    my @ee = split /,/,$blockEnds;
 	    for(my $i=0;$i<$blockCount;$i++){
-		my $length = $ee[$i]-$ss[$i];
-		print $length,",";
+	        my $length = $ee[$i]-$ss[$i];
+	        print $length,",";
 	    }
 	    print "\t";
 	    for(my $i=0;$i<$blockCount;$i++){
-		my $relstart = $ss[$i]-$start;
-		print $relstart,",";
+	        my $relstart = $ss[$i]-$start;
+	        print $relstart,",";
 	    }
 	    print "\n";
 	'
