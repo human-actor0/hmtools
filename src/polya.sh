@@ -74,6 +74,78 @@ c	7	8	.	2	+" | pa.bw - tmp.c 1 tmp.o
 ls -la tmp.*.bw
 rm -rf tmp.* 
 }
+pa.cluster(){
+usage="
+USAGE: $FUNCNAME <maxd> <bed> [<bed>..]
+"
+if [ $# -lt 2 ];then echo "$usage"; return; fi
+	echo "# d=$1 files=[ ${@:2} ]";
+	local d=$1;
+	local tmpd=`mymktempd`;
+	local files=( ${@:2} );	
+	local chroms="";
+	for (( i=0; i< ${#files[@]}; i++ ));do
+		mkdir $tmpd/$i
+		bed.split ${files[$i]} $tmpd/$i
+		chroms="$chroms `ls $tmpd/$i`"
+	done
+	chroms=( `echo "$chroms" | tr " " "\n" | sort -u` );
+	for chrom in ${chroms[@]};do
+		cat $tmpd/*/$chrom | bed.sort - \
+		| mergeBed -i stdin -s -c 2,3,5 -o collapse,collapse,collapse -d $d \
+		| perl -ne 'chomp; my @a=split/\t/,$_;
+			my @s=split/,/,$a[4]; my @e=split/,/,$a[5];
+			my @x=(); for(my $i=0;$i<=$#s; $i++){ $x[$i]= int(($s[$i] + $e[$i]  - 0.5)/2); }
+			my @y=split/,/,$a[6];
+			my $n=0; my $s=0; my $p=0;
+			for(my $i=0; $i <= $#x; $i++){
+				$n++; $s+=$y[$i]; $p+=$y[$i]*$x[$i];
+			}
+			my $center=int( 0.5*($a[1]+$a[2]));
+			if($s > 0){ $center=int( $p/$s + 0.5); }
+			my $score=sprintf("%.2f",$s);
+			print $a[0],"\t",$a[1],"\t",$a[2],"\t",$center,"\t",$score,"\t",$a[3],"\n";
+		' > $tmpd/$chrom
+	done
+
+	for chrom in ${chroms[@]};do
+		for (( i=0; i < ${#files[@]}; i++ ));do
+			if [ -f $tmpd/$i/$chrom ];then
+				intersectBed -a $tmpd/$chrom -b $tmpd/$i/$chrom -wa -wb -s \
+				| bed.enc - | awk -v OFS="\t" -v i=$i '{ print $4","i,$11;}' | stat.sum -  >> $tmpd/s.$chrom
+			fi
+		done
+
+		cat $tmpd/s.$chrom | perl -e 'use strict; my %res=(); my $n='${#files[@]}';
+			while(<STDIN>){ chomp; 
+				my ($idi,$s) = split /\t/,$_;
+				my ($id,$i)=split /,/,$idi;
+				$res{$id}{$i} = $s;
+			}	
+			foreach my $id (keys %res){
+				print $id;
+				for(my $i=0; $i<$n; $i++){
+					my $v= defined $res{$id}{$i} ? $res{$id}{$i} : 0; 
+					print "\t$v";	
+				}
+				print "\n";
+			}
+		' | tr "@" "\t"
+	done
+	rm -rf $tmpd	
+}
+pa.cluster.test(){
+echo \
+"c	1	2	n1	1	-
+c1	1	2	n1	1	-
+c	1	2	p1	1	+" > tmp.a
+echo \
+"c	2	3	p2	10	+
+c	20	30	p4	0	+
+c	4	5	p3	10	+" > tmp.b
+	pa.cluster 3 tmp.a tmp.b
+	rm tmp.*
+}
 
 pa.cluster_sb(){ 
 usage="

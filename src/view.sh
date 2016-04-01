@@ -56,6 +56,7 @@ Rfuncs='
 		con=file(file,"r");
 		line=readLines(con,n=1);
 		grange=NULL;
+		name="noname";
 		while(length(line) > 0){
 			if(line == ""){ line=readLines(con,n=1);next ;}
 			tmp=strsplit(line," ")[[1]]
@@ -95,7 +96,8 @@ Rfuncs='
 				ylim=c(0, nrow(bed));	
 			}
 		}
-		if( !is.null(grange)){ xlim=c(grange$start,grange$end);} 
+		if(is.null(grange)){ grange$start=xlim[1]; grange$end=xlim[2];}
+		else{ xlim=c(grange$start,grange$end);} 
 		return(list(track=data,grange=grange,xlim=xlim,ylim=ylim));
 	}
 '
@@ -128,6 +130,7 @@ view.gene(){
 	cat $1 | run_R "$Rfuncs"'
 		D=parse_track("stdin");
 		png(file="'$2'");
+		str(D);
 		for( track in D$track){
 			if(is.null(D$grange)){ s= D$xlim[1]; e=D$xlim[2];}
 			else{

@@ -121,10 +121,13 @@ asp.prep.test(){
 echo \
 "chr1	1	2	n1	0	+	1,3,1	0.6" > tmp.3ss.ctr1
 echo \
+"chr1	1	2	n1	0	+	1,3,1	0.6" > tmp.3ss.ctr2
+echo \
 "chr1	1	2	n1	0	+	3,1,1	0.3" > tmp.3ss.trt1
 echo \
 "chr1	1	2	n1	0	+	3,2,1	0.2" > tmp.3ss.trt2
 asp.prep tmp.3ss.trt1,tmp.3ss.trt2 3ss tmp.3ss.trt
+asp.prep tmp.3ss.ctr1,tmp.3ss.ctr2 3ss tmp.3ss.ctr
 head tmp.3ss*
 rm tmp.*	
 }
@@ -155,43 +158,67 @@ asp.cmp.test(){
 echo \
 "chr1	1	2	n1	0	+	1,3,1	0.6" > tmp.3ss.ctr1
 echo \
+"chr1	1	2	n1	0	+	1,3,1	0.6" > tmp.3ss.ctr2
+echo \
 "chr1	1	2	n1	0	+	3,1,1	0.3" > tmp.3ss.trt1
 echo \
 "chr1	1	2	n1	0	+	3,2,1	0.2" > tmp.3ss.trt2
-asp.cmp tmp.3ss.ctr1 tmp.3ss.trt1,tmp.3ss.trt2 3ss edger
+asp.cmp tmp.3ss.ctr1,tmp.3ss.ctr2 tmp.3ss.trt1,tmp.3ss.trt2 3ss edger
 
 echo \
 "chr1	1	2	n1	0	+	1,1,3	0.6" > tmp.spi.ctr1
 echo \
+"chr1	1	2	n1	0	+	1,1,3	0.6" > tmp.spi.ctr2
+echo \
 "chr1	1	2	n1	0	+	3,3,1	0.3" > tmp.spi.trt1
 echo \
 "chr1	1	2	n1	0	+	3,3,2	0.2" > tmp.spi.trt2
-asp.cmp tmp.spi.ctr1 tmp.spi.trt1,tmp.spi.trt2 spi edger
+asp.cmp tmp.spi.ctr1,tmp.spi.ctr2 tmp.spi.trt1,tmp.spi.trt2 spi edger
 rm tmp.*
 }
 
 asp.spi(){
-usage=" 
- FUNCT: Calculate SPI
- OUTPU: bed6 a,b,c a/(0.5*(b+c)+a)
- USAGE: $FUNCNAME <intron.bed6> <read.bed12> <strand> [<count>]
-	<strand>: 0: null, 1:count on the same strand, 2: count on the opposite strand
-	<count> : 0: use as it is (default), 1: count as 1, 2: phred score
+	usage(){
+	echo " 
+	 FUNCT: Calculate SPI
+	 USAGE: $FUNCNAME [options] <intron.bed6> <read.bed12> 
 
-	               (a)	
-		_/     sp       \_
-	[    5'  ]--------------[   3'      ]
-               _(b)_          _(c)_
-"
-	if [ $# -lt 3 ];then echo "$usage"; return; fi
-	local S=${3/1/"-s"}; S=${S/2/"-S"}; S=${S/0/""};
+		[options]:
+		 -s : only count reads on the same strand of intron.bed6 (default none)
+		 -S : only count reads on the same opposite strand of intron.bed6 (default none)
+		 -c <flag> : 
+			0 : use as it is (default)
+			1 : count as 1
+			2 : convert phred score to probability
+
+	 OUTPUT: bed6 a,b,c a/(0.5*(b+c)+a)
+			       (a)	
+			_/     sp       \_
+		[    5'  ]--------------[   3'      ]
+		       _(b)_          _(c)_
+	"
+	return;
+	}
+	if [ $# -lt 2 ];then echo "$usage"; return; fi
+	local OPTIND opt strand count C S
+	C=0; S="";
+	while getopts ":sSc:" opt; do
+		case "${opt}" in
+			s) S="-s";;
+			S) S="-S";;
+			c) C=$OPTARG;;
+			*) usage
+		esac
+	done
+	shift $((OPTIND-1))
+	
 	local tmpd=`mymktempd`; 
 	touch $tmpd/a $tmpd/b $tmpd/c $tmpd/r.1 $tmpd/r.2
 	#local tmpd=tmpd; rm -rf $tmpd; mkdir -p $tmpd
 	mycat $1 | bed.enc - | sort -u > $tmpd/i
 	bed.5p $tmpd/i > $tmpd/i.5
 	bed.3p $tmpd/i > $tmpd/i.3
-	mycat $2 | bed.score - ${4:-"0"} \
+	mycat $2 | bed.score - $C \
 		| awk -v OFS="\t" -v O=$tmpd/r '{ n=1; if($10 > 1){ n=2;} print $0 >> O"."n; }'
 
 	## count spliced
@@ -227,11 +254,11 @@ c	200	210	r6	1	+	190	200	0,0,0	1	10	0
 c	201	211	r7	1	+	190	200	0,0,0	1	10	0" > tmp.r
 head tmp.*
 echo "==> result"
-	asp.spi tmp.intron tmp.r 1 
+	asp.spi -s -c 1 tmp.intron tmp.r 
 	rm tmp.intron tmp.r
 }
 
-asp.3ss(){ 
+asp.3ss_smart(){ 
 usage=" 
  FUNCT: calculate 3SS statistics for each intron
  OUTPU: intron.bed6 a,b,c  1-a/(b+c)
@@ -287,22 +314,90 @@ usage="
 	
 	rm -rf $tmpd
 }
+asp.3ss(){ 
+
+usage(){ 
+echo "
+ FUNCT: calculate 3SS statistics for each 3 prime regions 
+ OUTPU: 3\' regions of introns + a,b,c + 1-a/b
+ USAGE: $FUNCNAME [options] <intron.bed6> <read.bed12> 
+
+  [options]:
+	-w <int> : a window size for upstream (unspliced) and downstream (spliced) regions 
+	-s : only count reads on the same strand of intron.bed6 (default none)
+	-S : only count reads on the same opposite strand of intron.bed6 (default none)
+	-c <int> : 
+		0 : use as it is (default)
+		1 : count as 1
+		2 : convert phred score to probability
+
+               _/  _/  (c)       \_
+ [  5\' exon    ]-----------------[   3\' exon     ]
+                         |--(a)--|--(b)--|
+" 
+return; 
+}
+
+	if [ $# -lt 2 ];then echo "$usage"; return; fi
+	local OPTIND opt C S W
+	C=0; S=""; W=25;
+	while getopts ":sSc:w:" opt; do
+		case "${opt}" in
+			s) S="-s";;
+			S) S="-S";;
+			c) C=$OPTARG;;
+			w) W=$OPTARG;;
+			*) usage
+		esac
+	done
+	shift $((OPTIND-1))
+
+	local tmpd=`mymktempd`;
+	touch $tmpd/a $tmpd/b $tmpd/c $tmpd/r.1 $tmpd/r.2
+
+	mycat $1 | bed.3p - | sort -u | bed.enc - > $tmpd/i 
+
+	bed.3p $tmpd/i | bed.flank - $(( $W -1 )) 0 1  > $tmpd/i.a
+	bed.3p $tmpd/i | bed.flank - -1 $W 1 > $tmpd/i.b 
+
+	mycat $2 | bed.score - $C \
+		| awk -v OFS="\t" -v O=$tmpd/r '{ n=1; if($10 > 1){ n=2;} print $0 >> O"."n; }'
+
+	cut -f1-6 $tmpd/r.1 > $tmpd/r.s
+	bed.exon $tmpd/r.2 >> $tmpd/r.s
+
+	intersectBed -a $tmpd/i.a -b $tmpd/r.s $S -wa -wb \
+		| cut -f4,11 | stat.sum - | sort -k1,1 > $tmpd/a 	
+	intersectBed -a $tmpd/i.b -b $tmpd/r.s $S -wa -wb \
+		| cut -f4,11 | stat.sum - | sort -k1,1 > $tmpd/b 	
+	bed.intron $tmpd/r.2 \
+		| intersectBed -a $tmpd/i -b stdin $S -wa -wb \
+		| awk '$6=="+" && $3==$9 || $6=="-" && $2==$8' \
+		| cut -f 4,11 | stat.sum - | sort -k1,1 > $tmpd/c
+
+	join -a 1 -a 2 -e 0 -o 0,1.2,2.2 $tmpd/a $tmpd/b \
+	| join -a 1 -a 2 -e 0 -o 0,1.2,1.3,2.2 - $tmpd/c \
+	| awk '{v=$3+$4; if(v==0){ v="-inf";}else{ v=1 - $2/v;}  print $1,$2","$3","$4,v;}' \
+	| tr "@ " "\t"
+	
+	rm -rf $tmpd
+}
 asp.3ss.test(){ 
 echo \
-"c	100	200	intron1	0	+
-c	100	199	intron2	0	+" > tmp.intron
+"chr1	100	200	intron1	0	+
+chr1	100	199	intron2	0	+" > tmp.intron
 echo \
-"c	90	210	r1	1	+	90	210	0,0,0	2	10,10	0,110
-c	80	210	r2	1	+	80	210	0,0,0	2	10,10	0,120
-c	189	199	r3	1	+	190	200	0,0,0	1	10	0
-c	190	200	r4	1	+	190	200	0,0,0	1	10	0
-c	191	201	r5	1	+	190	200	0,0,0	1	10	0
-c	199	209	r6	1	+	190	200	0,0,0	1	10	0
-c	200	210	r7	1	+	190	200	0,0,0	1	10	0
-c	201	211	r8	1	+	190	200	0,0,0	1	10	0" > tmp.r
+"chr1	90	210	r1	1	+	90	210	0,0,0	2	10,10	0,110
+chr1	80	210	r2	1	+	80	210	0,0,0	2	10,10	0,120
+chr1	189	199	r3	1	+	189	199	0,0,0	1	10	0
+chr1	190	200	r4	1	+	190	200	0,0,0	1	10	0
+chr1	191	201	r5	1	+	191	201	0,0,0	1	10	0
+chr1	199	209	r6	1	+	199	209	0,0,0	1	10	0
+chr1	200	210	r7	1	+	200	210	0,0,0	1	10	0
+chr1	201	211	r8	1	+	201	211	0,0,0	1	10	0" > tmp.r
 head tmp.*
 echo "==> result"
-	asp.3ss tmp.intron tmp.r 10 1 
+	asp.3ss -s tmp.intron tmp.r 
 	rm tmp.intron tmp.r
 }
 asp.3ss_lessfp(){ 

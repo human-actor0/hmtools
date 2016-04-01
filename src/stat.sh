@@ -100,11 +100,23 @@ echo \
 stat.sum(){
 	cat $1 | perl -e 'use strict; my %res=();
 	while(<STDIN>){ chomp; my @a=split/\t/,$_;
-		$res{ $a[0] } += $a[1]; 
+		if(!defined $res{$a[0]}){
+			$res{$a[0]} = ();
+		}	
+		for(my $i=0; $i< $#a; $i++){
+			$res{ $a[0] }[$i] += $a[$i+1]; 
+		}
 	}
 	foreach my $k (keys %res){
-		print $k,"\t",$res{$k},"\n";
+		print $k,"\t",join("\t",@{$res{$k}}),"\n";
 	}'
+}
+stat.sum.test(){
+echo \
+"a	1	2
+b	3	4
+a	10	20
+b	30	40" | stat.sum - 
 }
 stat.prep(){
 usage="
@@ -360,7 +372,7 @@ USAGE: $FUNCNAME <stat.prep> [<bcv>]
 	group=rep(1,length(cn)); group[ grep("trt",cn)]=2;
 	event=rep(1,length(cn)); event[ grep(".c2",cn)]=2;
 	library(edgeR)
-	if( length(grep("trt",cn)) > 1 || length(grep("ctr",cn)) > 1){
+	if( length(grep("trt",cn)) == 1 || length(grep("ctr",cn)) == 1){
 		bcv='"$BCV"';
 		y = DGEList(counts=tt[,2:3],group=c(2,1))
 		et = exactTest(y, dispersion=bcv^2)	
@@ -384,12 +396,10 @@ USAGE: $FUNCNAME <stat.prep> [<bcv>]
 
 		fit=glmFit(y$counts, H1, y$tagwise.dispersion,offset=0,prior.count=0)
 		llh=glmLRT(fit,coef=coef)
-
 		res=data.frame(tt, logFC=llh$table$logFC, pval=llh$table$PValue)
 		## chrom start end logFC pval
 		write.table(res,file="stdout", col.names=T,row.names=F,sep="\t",quote=F);
-	}
-	' 
+	}'  
 }
 stat.edger.test(){
 echo \
