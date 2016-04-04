@@ -2,6 +2,34 @@
 . $HMHOME/src/root.sh
 . $HMHOME/src/stat.sh
 
+
+
+bed.group(){
+usage(){ echo "
+ USAGE: $FUNCNAME [option] <input.bed> <group.bed>
+ OUTPUT: group <input.bed> by <group.bed> at the last column (NA if no group membership)
+
+"
+return;
+}
+if [ $# -ne 2 ];then usage; fi
+        local tmpd=`mymktempd`;
+        local S="-s";
+        mycat $1 > $tmpd/a
+        mycat $2 > $tmpd/b
+        local n=`head -n 1 $tmpd/a | awk '{print NF;}'`;
+        f(){
+                cat $1 |perl -ne ' my $n='$2';
+                chomp; my @a=split/\t/,$_; 
+                my $add=($n <= $#a ? join("@",@a[$n..$#a]) : "NA");
+                print join("\t",@a[0..($n-1)]),"\t$add\n";'
+        }
+        intersectBed -a $tmpd/a -b $tmpd/b -wa -wb $S | f - $n
+        intersectBed -a $tmpd/a -b $tmpd/b -v $S | f - $n
+        rm -rf $tmpd
+}
+
+
 bed.rm_transcriptid(){
 	cat $1 | perl -ne '$_=~s/ENST\d+\|//g;print $_;'
 }
