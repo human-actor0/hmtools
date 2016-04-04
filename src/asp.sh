@@ -111,7 +111,7 @@ if [ $# -lt 2 ];then echo "$usage";return; fi
 	for f in `echo $1 | tr "," " "`;do
 		i=$(( $i + 1 ));
 		if [ $2 == "3ss" ];then
-			bed.enc $f | awk -v OFS="\t" '{ split($7,a,","); print $4,a[1],a[2]+a[3];}' > $3.$i;
+			bed.enc $f | awk -v OFS="\t" '{ split($7,a,","); print $4,a[1],a[2];}' > $3.$i;
 		elif [ $2 == "spi" ];then
 			bed.enc $f | awk -v OFS="\t" '{ split($7,a,","); print $4,a[2]+a[3],a[1];} ' > $3.$i;
 		fi
@@ -184,8 +184,8 @@ asp.spi(){
 	 USAGE: $FUNCNAME [options] <intron.bed6> <read.bed12> 
 
 		[options]:
-		 -s : only count reads on the same strand of intron.bed6 (default none)
-		 -S : only count reads on the same opposite strand of intron.bed6 (default none)
+		 -s : only count reads on the same strand of intron.bed6 
+		 -S : only count reads on the same opposite strand of intron.bed6 
 		 -c <flag> : 
 			0 : use as it is (default)
 			1 : count as 1
@@ -254,7 +254,7 @@ c	200	210	r6	1	+	190	200	0,0,0	1	10	0
 c	201	211	r7	1	+	190	200	0,0,0	1	10	0" > tmp.r
 head tmp.*
 echo "==> result"
-	asp.spi -s -c 1 tmp.intron tmp.r 
+	asp.spi tmp.intron tmp.r 
 	rm tmp.intron tmp.r
 }
 
@@ -319,7 +319,7 @@ asp.3ss(){
 usage(){ 
 echo "
  FUNCT: calculate 3SS statistics for each 3 prime regions 
- OUTPU: 3\' regions of introns + a,b,c + 1-a/b
+ OUTPU: 3\' regions of introns + a,b,c + 1-a/b (note, c is added in b)
  USAGE: $FUNCNAME [options] <intron.bed6> <read.bed12> 
 
   [options]:
@@ -333,7 +333,7 @@ echo "
 
                _/  _/  (c)       \_
  [  5\' exon    ]-----------------[   3\' exon     ]
-                         |--(a)--|--(b)--|
+                          |--(a)--|--(b)--|
 " 
 return; 
 }
@@ -377,7 +377,7 @@ return;
 
 	join -a 1 -a 2 -e 0 -o 0,1.2,2.2 $tmpd/a $tmpd/b \
 	| join -a 1 -a 2 -e 0 -o 0,1.2,1.3,2.2 - $tmpd/c \
-	| awk '{v=$3+$4; if(v==0){ v="-inf";}else{ v=1 - $2/v;}  print $1,$2","$3","$4,v;}' \
+	| awk '{v=$3; if(v==0){ v="-inf";}else{ v=1 - $2/v;}  print $1,$2","$3","$4,v;}' \
 	| tr "@ " "\t"
 	
 	rm -rf $tmpd
