@@ -338,7 +338,7 @@ echo "
 return; 
 }
 
-	if [ $# -lt 2 ];then echo "$usage"; return; fi
+	if [ $# -lt 2 ];then usage; return; fi
 	local OPTIND opt C S W
 	C=0; S=""; W=25;
 	while getopts ":sSc:w:" opt; do
