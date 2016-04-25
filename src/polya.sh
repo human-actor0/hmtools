@@ -11,7 +11,6 @@ FILTER_M=$HMHOME/src/nb.model
 HG19FA=/hmdata/ucsc/hg19/chromosome/
 CLUSTER=$HMHOME/src/cluster_1d_kmeans.sh
 BW=$HMHOME/bin/bedGraphToBigWig
-
 pa.comp_pcpa(){
 usage="
 FUNCT: relative FC  
@@ -75,14 +74,29 @@ ls -la tmp.*.bw
 rm -rf tmp.* 
 }
 pa.cluster(){
-usage="
-USAGE: $FUNCNAME <maxd> <bed> [<bed>..]
+usage(){
+echo "
+USAGE: $FUNCNAME [options] <bed> [<bed>..]
+ [options]: 
+	-d <maxd> : maximum distance between peaks (10 default)
+	-h : print header (default none)
 "
-if [ $# -lt 2 ];then echo "$usage"; return; fi
-	echo "# d=$1 files=[ ${@:2} ]";
-	local d=$1;
+}
+local d OPTIND; d=10; h=0;
+while getopts ":d:h" opt ;do
+	case $opt in
+		d) d=$OPTARG;;
+		h) h=1;;
+		\?) usage;;
+	esac
+done
+shift $(( OPTIND -1 ))
+if [ $# -lt 1 ];then usage; return; fi
+	if [ $h = 1 ];then
+		echo "# d=$1 files=[ ${@:1} ]";
+	fi
 	local tmpd=`mymktempd`;
-	local files=( ${@:2} );	
+	local files=( ${@:1} );	
 	local chroms="";
 	for (( i=0; i< ${#files[@]}; i++ ));do
 		mkdir $tmpd/$i
@@ -143,9 +157,68 @@ echo \
 "c	2	3	p2	10	+
 c	20	30	p4	0	+
 c	4	5	p3	10	+" > tmp.b
-	pa.cluster 3 tmp.a tmp.b
+	pa.cluster -d 3 tmp.a tmp.b
 	rm tmp.*
 }
+
+pa.cmp(){
+usage(){ echo \
+" $FUNCNAME [options] <3utr.bed> <ctr.bed> <trt.bed>
+	[options]:
+	 -d <int> : maximum distance between peaks
+"
+return
+}
+local d OPTIND; d=10;
+
+while getopts ":d:" opt ;do
+	case $opt in
+		d) d=$OPTARG;;
+		\?) usage;;
+	esac
+done
+shift $(( OPTIND -1 ))
+if [ $# -ne 3 ];then usage; fi
+	pa.cluster -d $d $2 $3 | bed.group - $1 \
+	| perl -e 'use strict; my %res=();
+	while(<STDIN>){ chomp; my @a=split/\t/,$_;
+		if( $a[$#a] ne "NA"){
+			$res{$a[$#a]}{$a[3]}=[$a[6],$a[7]];
+		}
+	}		
+	foreach my $i (keys %res){
+		my @x=sort {$a<=>$b} keys %{$res{$i}};
+		my @y1=map {$res{$i}{$_}->[0]} @x;
+		my @y2=map {$res{$i}{$_}->[1]} @x;
+		print $i,"\t",join(",",@x),"\t",join(",",@y1),"\t",join(",",@x),"\t",join(",",@y2),"\n";
+	}' | stat.lineartrend - \
+	| tr "@" "\t" | awk -v OFS="\t" '{ if($6=="-"){ $11=-$11;} } 1';
+}
+pa.cmp.test(){
+echo \
+"c	100	200	gene1	0	+
+c	300	400	gene2	0	+" > tmp.3utr
+
+echo \
+"c	10	11	pa0	6	+
+c	110	111	pa1	5	+
+c	120	121	pa2	4	+
+c	150	151	pa3	3	+
+c	310	311	pa4	2	+
+c	399	400	pa5	1	+" > tmp.ctr
+
+echo \
+"c	10	11	pa0	10	+
+c	110	111	pa1	20	+
+c	120	121	pa2	30	+
+c	150	151	pa3	40	+
+c	310	311	pa4	50	+
+c	399	400	pa5	60	+" > tmp.trt
+head tmp.*
+pa.cmp -d 2 tmp.3utr tmp.ctr tmp.trt 
+rm tmp.*
+}
+
 
 pa.cluster_sb(){ 
 usage="
