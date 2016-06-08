@@ -2,9 +2,478 @@
 . $HMHOME/src/root.sh;
 . $HMHOME/src/stat.sh
 . $HMHOME/src/bed.sh
+
+
+asp.ce(){
+usage(){ echo "
+FUNCT: generate cassettee exon events using junction files
+USAGE: $FUNCNAME [options] <tag>:<jc> [<tag>:<jc> .. ]
+	[options]:
+	 -a : ignore strand (default) 
+	 -S : switch strand 
+	 -s : strand sensitive 
+"
+}
+	
+	if [ $# -lt 1 ];then usage; return; fi
+
+        local OPTIND; local S="a";
+        while getopts ":sSa" arg; do
+                case $arg in
+                        S) S="S";;
+                        s) S="s";;
+                        \?) echo "Invalid -${OPTARG}"; return;;
+                esac
+        done
+        shift $(( $OPTIND - 1 ))
+	
+
+	local cmd='use strict; my $S="'$S'"; 
+	my @tmp=split/ +/,"'$@'";
+	my @files=(); my @tags=();
+	my $i=0;
+	foreach my $e (@tmp){
+		my @es=split/:/,$e;
+		if (scalar @es > 1){
+			push @files,$es[1];
+			push @tags,$es[0];
+		}else{
+			push @files,$e;
+			push @tags,"tag$i";
+		}
+		$i++;
+	}
+	
+	my %L=(); my %R=(); my %U=();
+	## preprocessing 
+	$i=0;
+	foreach my $f (@files){
+		my $tag=$tags[$i++];	
+		open my $fh,"<",$f or die "cannot open $f";
+		while(<$fh>){ chomp;my @a=split/\t/,$_;
+			my $k=$a[0];
+			if( $S eq "a"){ $k.=",+";
+			}elsif($S eq "s"){ $k.=",".$a[5];   
+			}elsif($S eq "S"){ $k.=",".$a[5]; $k=~tr/+-/-+/; } 
+
+			if($a[3] eq "s"){
+				$L{$k}{$a[1]}{$a[2]-1}{$tag}+=$a[4];
+				$R{$k}{$a[2]-1}{$a[1]}{$tag}+=$a[4];
+			}elsif($a[3] eq "u"){
+				$U{$k}{$a[1]}{$tag}+=$a[4];
+			}
+		}
+		close($fh);
+	}
+
+	print "chrom\tstart\tend\tleft.exon\tright.exon\tstrand\t",join("\t",@tags),"\n";
+	## find Cassettee exon candidates
+	##    a]---[b      c]---[d 
+	foreach my $k (keys %L){
+	my ($ch,$st)=split/,/,$k;
+	foreach my $a (keys %{$L{$k}}){
+	foreach my $d (keys %{$L{$k}{$a}}){ 
+
+		## find the smallest non-overlapping exons
+		my @bc=(); my @bc1=();
+		foreach my $b (keys %{$L{$k}{$a}}){
+		foreach my $c (keys %{$R{$k}{$d}}){ 
+			if($b<$c){ push @bc,[$b,$c]; } 
+		}}
+
+		for(my $i=0; $i<= $#bc; $i++){
+			my $inc=0; 
+			#print join("-",@{$bc[$i]}),"\n";
+			for(my $j=0; $j<= $#bc; $j++){
+				next if( $i==$j);
+				## i includes j
+				if( $bc[$i]->[0] <= $bc[$j]->[0] && $bc[$i]->[1] >= $bc[$j]->[1]){
+					#print join("->>",@{$bc[$j]}),"\n";
+					$inc=1; last; 
+				}
+			}
+			if($inc==0){ push @bc1,$bc[$i];}
+		}
+
+		## print results
+		foreach my $e (@bc1){
+			my ($b,$c)=@$e;
+			print join("\t",($ch,$b,$c+1,$a,$d+1,$st));
+			foreach my $tag (@tags){
+				my $ds = defined $L{$k}{$a}{$d}{$tag}? $L{$k}{$a}{$d}{$tag} : 0;
+				my $bs = defined $L{$k}{$a}{$b}{$tag}? $L{$k}{$a}{$b}{$tag} : 0;
+				my $cs = defined $R{$k}{$d}{$c}{$tag}? $R{$k}{$d}{$c}{$tag} : 0;
+				my $abc=join(",",($ds,$bs,$cs));
+				my $w=defined $U{$k}{$a}{$tag}? $U{$k}{$a}{$tag} : 0;
+				my $x=defined $U{$k}{$b}{$tag}? $U{$k}{$b}{$tag} : 0;
+				my $y=defined $U{$k}{$c}{$tag}? $U{$k}{$c}{$tag} : 0;
+				my $z=defined $U{$k}{$d}{$tag}? $U{$k}{$d}{$tag} : 0;
+				my $wxyz=join(",",($w,$x,$y,$z));
+				my $na=$ch.":".$a."-".($d+1).$st;
+				my $sc=join(";",($abc,$wxyz));
+				print "\t",join("\t",($abc.",".$wxyz));
+			}
+			print "\n";
+		}
+	}}}
+	'
+	perl -e "$cmd"
+}
+
+asp.ce.test(){
+#    100--120 140-------------200 
+#    100--------150 151-------200 
+#    100---------------160 
+#                        180--200
+echo \
+"chr1	100	200	s	1	+
+chr1	100	150	s	10	+
+chr1	151	200	s	11	+
+chr1	100	120	s	2	+
+chr1	140	200	s	3	+
+chr1	100	160	s	4	+
+chr1	180	200	s	5	+
+chr1	100	101	u	6	-
+chr1	119	120	u	7	+" > tmp.a 
+ asp.ce -S ctr:tmp.a trt:tmp.a
+ asp.ce -a ctr:tmp.a trt:tmp.a
+}
+asp.ce2ei(){
+usage(){ echo "
+FUNC: make exclusion and inclusion events of cassette exons
+ $FUNCNAME <ce> 
+"
+}
+if [ $# -lt 1 ];then  usage; return; fi
+	cat $1 | perl -e 'use strict;
+		sub ei{
+			my ($x) = @_;
+			my @y=split/,/,$x; my ($in,$ex)=(0,0);
+			for(my $i=0; $i<=$#y; $i++){
+				if($i==1 || $i==2){ $in+=$y[$i];
+				}elsif($i==0 || $i==4 || $i==5){ $ex+=$y[$i] }
+			}
+			return( $ex."\t".$in);
+		}	
+		my $first=1; my @h=(); my @h2=(); 
+		my ($nctr,$ntrt)=(0,0);
+		while(<STDIN>){ chomp; my @a=split/\t/,$_; 
+			if($first){ 
+				@h=@a; $first=0;  
+				foreach my $hi (@h[6..$#h]){
+					push @h2,$hi.".c1";
+					push @h2,$hi.".c2";
+				}
+				print join("@",@h),"\t",join("\t",@h2),"\n";
+				next; 
+			}
+			print join("@",@a);
+			foreach my $ai (@a[6..$#a]){
+				print "\t",ei($ai);
+			}	
+			print "\n";
+		}
+	'
+}
+
+asp.ce2ei.test(){
+echo \
+"chrom	start	end	left.exon	right.exon	strand	ctr1	ctr2	trt
+chr1	159	181	100	200	+	1,4,5,6,0,0,0	1,4,5,6,0,0,0	0,4,5,6,0,0,0
+chr1	119	141	100	200	+	1,2,3,6,7,0,0	1,4,5,6,0,0,0	1,2,3,6,7,0,0
+chr1	149	152	100	200	+	1,10,11,6,0,0,0	1,4,5,6,0,0,0	1,10,11,6,0,0,0" \
+| asp.ce2ei -
+
+}
+
+asp.cecmp(){
+usage(){ echo "
+FUNC: make exclusion and inclusion events of cassette exons
+ $FUNCNAME <ce> <ctr> <trt> 
+"
+}
+	local i=1;
+	local inp=;	
+	for f in `echo $1 | tr "," " "`;do
+		inp+="ctr$i:$f "
+		i=$(( $i + 1 ));
+	done
+	i=1;
+	for f in `echo $2 | tr "," " "`;do
+		inp+="trt$i:$f "
+		i=$(( $i + 1 ));
+	done
+	asp.ce $inp | perl -e 'use strict;
+		sub ei{
+			my ($x) = @_;
+			my @y=split/,/,$x; my ($in,$ex)=(0,0);
+			for(my $i=0; $i<=$#y; $i++){
+				if($i==1 || $i==2){ $in+=$y[$i];
+				}elsif($i==0 || $i==4 || $i==5){ $ex+=$y[$i] }
+			}
+			return( $ex."\t".$in);
+		}	
+		my $first=1; my @h=(); my @h2=(); 
+		my ($nctr,$ntrt)=(0,0);
+		while(<STDIN>){ chomp; my @a=split/\t/,$_; 
+			if($first){ 
+				@h=@a; $first=0;  
+				foreach my $hi (@h){
+					if($hi=~/ctr/){ 
+						$nctr++;
+						push @h2,"ctr".$nctr.".c1";
+						push @h2,"ctr".$nctr.".c2";
+					}elsif($hi=~/trt/){
+						$ntrt++;
+						push @h2,"trt".$ntrt.".c1";
+						push @h2,"trt".$ntrt.".c2";
+					}
+				}
+				print join("\t",@h),"\t",join("\t",@h2),"\n";
+				next; 
+			}
+			print $_;
+			for(my $i=0; $i<=$#a; $i++){
+				if($h[$i]=~/ctr/){
+					print "\t",ei($a[$i]);
+				
+				}elsif($h[$i]=~/trt/){
+					print "\t",ei($a[$i]);
+				}
+			}	
+			print "\n";
+		}
+	'
+	
+}
+
+
+asp.ce2ei.test2(){
+#    100--120 140-------------200 
+#    100--------150 151-------200 
+#    100---------------160 
+#                        180--200
+echo \
+"chr1	100	200	s	1	+
+chr1	100	150	s	10	+
+chr1	151	200	s	11	+
+chr1	100	120	s	2	+
+chr1	140	200	s	3	+
+chr1	100	160	s	4	+
+chr1	180	200	s	5	+
+chr1	100	101	u	6	+
+chr1	119	120	u	7	+" > tmp.a 
+ asp.ce2ei tmp.a,tmp.a tmp.a
+
+}
+
+asp.jc(){
+usage(){ echo "
+Usage : $FUNCNAME <bed12> <out>
+Output: <out>.jc 
+"
+}
+if [ $# -lt 1 ];then usage; return; fi
+	local tmpd=`mymktempd`; mkdir -p $tmpd/a
+	bed.split $1 $tmpd/a
+	for f in $tmpd/a/*;do
+		bed.intron $f \
+		| awk -v OFS="\t" '{ $2=$2-1; $3=$3+1; $4="s"; $5=1; }1' \
+		| bed.sum - > $tmpd/${f##*/}.j
+		
+		awk -v OFS="\t" '{ 
+			print $1,$2,$2+1,"l",1,$6;
+			print $1,$3-1,$3,"r",1,$6; }' $tmpd/${f##*/}.j > $tmpd/${f##*/}.j53
+
+		awk '$10 == 1' $f | cut -f1-6 \
+		| intersectBed -a $tmpd/${f##*/}.j53 -b stdin -wa -wb -s \
+		| awk -v OFS="\t" '($4=="l" && $9 > $3 || $4=="r" && $8 < $2){ 
+			print $1,$2,$3,"u",$5,$6;
+		}' | bed.sum -  > $tmpd/${f##*/}.u 
+
+		cat $tmpd/${f##*/}.j
+		cat $tmpd/${f##*/}.u
+		
+	done
+	
+	rm -rf $tmpd;
+}
+asp.jc.test(){
+echo \
+"chr1	1000	2000	a	255	+	1000	2000	0,0,0	2	10,20	0,980
+chr1	1001	2001	a	255	+	1001	2001	0,0,0	2	9,21	0,979
+chr1	1002	2002	a	255	+	1002	2002	0,0,0	2	8,22	0,978
+chr1	1009	1019	a	255	+	1009	1019	0,0,0	1	10	0
+chr1	1010	1020	a	255	+	1010	1020	0,0,0	1	10	0
+chr1	1011	1021	a	255	+	1011	1021	0,0,0	1	10	0
+chr1	1979	1989	a	255	+	1979	1989	0,0,0	1	10	0
+chr1	1980	1990	a	255	+	1980	1990	0,0,0	1	10	0
+chr1	1981	1991	a	255	+	1981	1991	0,0,0	1	10	0" | asp.jc -
+}
+asp.jc31(){
+usage(){ echo "
+USAGE: $FUNCNAME <jc.bed> 
+	[options]: 
+	 -s : count read in the same strand 
+" 
+}
+if [ $# -lt 1 ];then usage; return; fi
+	bed.3p $1 | sort -k1,1 -k2,2n | groupBy -g 1,2,6 -c 3,4,5 -o collapse,collapse,collapse
+#	bed.sort $1 | mergeBed -c 2,3,4,5 -s -o collapse,collapse,collapse,collapse \
+#	| perl -ne 'chomp;my @a=split/\t/,$_;
+#		my $n=join(";",( @a[4..6] ));
+#		my $m=$a[7];
+#
+#		## chr start end starts;ends;jcs;jucs,jdcs n.jcs strand
+#		print join("\t",(@a[0..2],$n,$m,$a[3])),"\n";
+#	'
+}
+
+asp.jc31.test(){
+echo \
+"chr1	100	200	s	1	+
+chr1	100	300	s	2	+
+chr1	100	101	u	3	+
+chr1	199	200	u	4	+
+chr1	299	300	u	5	+" | asp.jc3 -
+
+}
+
+asp.jcprep_ef(){
+usage=" $FUNCNAME <method> <bed.jc> 
+"
+if [ $# -ne 2 ];then echo $usage;return; fi
+	cat $2 | perl -e 'use strict; my %res=(); my %u=();  my $M="'$1'";
+		while(<STDIN>){chomp; my @a=split/\t/,$_;
+			if( $a[3] eq "s"){
+				if($a[5] eq "+"){
+					$res{5}{$a[0].",".$a[5]}{$a[1]}{$a[2]-1}=$a[4];
+					$res{3}{$a[0].",".$a[5]}{$a[2]-1}{$a[1]}=$a[4];
+				}else{
+					$res{5}{$a[0].",".$a[5]}{$a[2]-1}{$a[1]}=$a[4];
+					$res{3}{$a[0].",".$a[5]}{$a[1]}{$a[2]-1}=$a[4];
+				}	
+			}elsif( $a[3] eq "u"){
+				$u{$a[0].",".$a[5]}{$a[1]}=$a[4];
+			}
+		}
+		foreach my $t (keys %res){
+		foreach my $c (keys %{$res{$t}}){
+		my ($ch,$st)=split/,/,$c;
+		foreach my $x (keys %{$res{$t}{$c}}){
+			my $ux=defined $u{$c}{$x}? $u{$c}{$x}:0;
+			my $sum_s = 0;
+			my $sum_u = $ux;
+			foreach my $y (keys %{$res{$t}{$c}{$x}}){
+				my $uy=defined $u{$c}{$y}? $u{$c}{$y}:0;
+				my $s=$res{$t}{$c}{$x}{$y};
+				$sum_s += $s;
+			}
+			if($M eq "3p" && $t == 3){
+				print join("\t", ( $c.",".$x,$sum_u,$sum_s)),"\n";
+			}
+		}}}
+	'
+}
+asp.jcprep(){
+usage="$FUNCNAME <method> <tag>:<bed.jc> [<tag>:<bed.jc>]
+	<method>: 
+		-3p: default 
+		-S : switch strand
+	 
+"
+if [ $# -lt 2 ];then echo $usage; return; fi
+
+fnsw(){
+	awk -v OFS="\t" '{ if($6=="-"){ $6="+";}else{ $6="-";} print $0;}' $1;
+}
+	local filt="cat"; # filter function
+	local method="3p";
+	case $1 in 
+		*"-S"* ) filt="fnsw";;
+		*"-3p"* ) method="3p";;
+	esac
+
+	local tmpd=`mymktempd`;
+	local files=( ${@:2} );
+	for tf in ${files[@]};do
+		if [ -f ${tf#*:} ];then
+			local tag=${tf%:*}; local f=${tf#*:} 
+			echo "id $tag.c1 $tag.c2" | tr " " "\t" > $tmpd/$tag
+			eval $filt $f | asp.jcprep_ef $method - >> $tmpd/$tag
+		fi
+	done
+	## at least one of c2 should be positive
+	stat.merge $tmpd/* | run_R '
+		tt=read.table("stdin",header=T);
+		tt1=tt[apply(tt[,grep(".c2",colnames(tt))],1,function(x){ mean(x > 0)}) >= 0.5,];
+		write.table(tt1,"stdout",col.names=T,row.names=F,sep="\t",quote=F);
+	'
+	rm -rf $tmpd;
+}
+asp.jcprep.test(){
+echo \
+"chr1	100	200	s	1	+
+chr1	100	300	s	2	+
+chr1	100	101	u	3	+
+chr1	199	200	u	4	+
+chr1	299	300	u	5	+" > tmp.1
+asp.jcprep -3p ctr1:tmp.1 ctr2:tmp.1
+
+}
+
+asp.cmpjc(){
+usage="
+FUNCT: calculate p-value of differential splicing rate
+USAGE: $FUNCNAME <ctr1>[,<ctr2> .. ] <trt1>[,<trt2> .. ] 
+"
+if [ $# -lt 4 ];then echo "$usage"; return; fi
+	local i=0; 
+	local tmpd=`mymktempd`;
+	asp.jcprep $1 $3 $tmpd/ctr 
+	asp.jcprep $2 $3 $tmpd/trt 
+	fa=`echo $tmpd/ctr* | tr " " ","`
+	fb=`echo $tmpd/trt* | tr " " ","`
+	if [ $4 == "edger" ];then
+		stat.prep $fa $fb | stat.edger - ${5:-""} | perl -ne '$_=~s/\.c2/\.sp/g;$_=~s/\.c1/\.un/g;print $_;'
+	else
+		echo "ERROR: $4 is unknown method"
+	fi
+	rm -rf $tmpd;
+}
+
+f(){
+echo \
+"chr1	1000	2000	a	1	+
+chr1	1000	2000	b	1	-" > tmp.a
+
+echo \
+"chr1	900	1100	r1	100	+
+chr1	900	1100	r2	101	-
+chr1	1900	2100	r3	255	+
+chr1	1900	2100	r4	255	+
+chr1	1900	2100	r5	255	-
+chr1	1900	2100	r6	255	-
+" > tmp.b
+}
+
+
+
 asp.view(){
 usage="     
 USAGE: $FUNCNAME <genes.bed12> <reads.bed12>
+echo \
+"chr1	10004	10148	HISEQ:332:c89cbanxx:1:2301:4302:54544	255	+	10004	10148	255,0,0	2	79,42	0,102
+chr1	10076	10256	HISEQ:332:c89cbanxx:1:1214:7419:58717	255	+	10076	10256	255,0,0	2	66,18	0,162
+chr1	10094	10465	HISEQ:332:c89cbanxx:1:1306:15197:83203	255	-	10094	10465	255,0,0	2	22,68	0,303
+chr1	10105	10467	HISEQ:332:c89cbanxx:1:1309:7231:76774	255	+	10105	10467	255,0,0	2	11,70	0,292
+chr1	10105	10465	HISEQ:332:c89cbanxx:1:2109:9823:99561	255	-	10105	10465	255,0,0	2	11,68	0,292
+chr1	10108	10460	HISEQ:332:c89cbanxx:1:2111:11378:94238	255	-	10108	10460	255,0,0	2	70,44	0,308
+chr1	10110	10269	HISEQ:332:c89cbanxx:1:1202:7536:97863	255	+	10110	10269	255,0,0	2	92,18	0,141
+chr1	10110	10260	HISEQ:332:c89cbanxx:1:1203:17552:80952	255	-	10110	10260	255,0,0	2	68,16	0,134
+chr1	10111	10463	HISEQ:332:c89cbanxx:1:1215:10190:15343	255	+	10111	10463	255,0,0	2	67,53	0,299
+chr1	10111	10440	HISEQ:332:c89cbanxx:1:2115:16272:29726	255	-	10111	10440	255,0,0	2	67,30	0,299" \
+| asp.jc -
 INPUT: genes (bed12) and reads (bed12)
 
 OUTPUT:

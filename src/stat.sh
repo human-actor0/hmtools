@@ -1,6 +1,111 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
 
+stat.edger_interact(){
+usage(){ echo "
+$FUNCNAME <table> <ctr_col> <trt_col> [option]
+"
+}
+	if [ $# -lt 3 ];then usage;return; fi
+	cat $1 | run_R '
+	library(edgeR)
+	CTR="^'$2'"; TRT="^'$3'"; 
+	tt=read.table("stdin",header=T,check.names=F);
+	cn=colnames(tt);
+	m=tt[,c(grep(CTR,cn), grep(TRT,cn))];
+
+	m.cn=colnames(m);
+	group=rep(1,length(m.cn)); 
+	group[ grep(CTR,m.cn)]=1;
+	group[ grep(TRT,m.cn)]=2;
+	event=rep(1,length(m.cn)); event[ grep(".c2",m.cn)]=2;
+	
+	y=DGEList(counts=m,group=factor(group));
+	y=calcNormFactors(y);
+
+	event.this=factor(event);
+	group.this=factor(group);
+	H1 <- model.matrix(~ event.this + group.this + event.this:group.this, data=y$samples )
+	H0 <- model.matrix(~ event.this + group.this )
+	coef <- (ncol(H0)+1):ncol(H1)
+	#y=estimateCommonDisp(y)
+	#y=estimateTagwiseDisp(y, trend="movingave")
+	y = estimateGLMCommonDisp(y,H1);
+	y = estimateGLMTrendedDisp(y,H1);
+	y = estimateGLMTagwiseDisp(y,H1);
+
+	fit=glmFit(y$counts, H1, y$tagwise.dispersion,offset=0,prior.count=0)
+	llh=glmLRT(fit,coef=coef)
+	nn=paste("logFC",TRT,"/",CTR,sep="")
+	tt[[nn]]=llh$table$logFC;
+	tt[["pval"]]=llh$table$PValue;
+	##res=data.frame(tt, nn=llh$table$logFC, pval=llh$table$PValue)
+	## chrom start end logFC pval
+	write.table(tt,file="stdout", col.names=T,quote=F,row.names=F,sep="\t");
+	' 
+}
+stat.edger_interact.test(){
+echo \
+"x@trt@ctr	trt1.c1	trt1.c2	trc.c1	trt2.c1	trt2.c2	ctr1.c1	ctr1.c2
+a	1	10	NA	11	10	11	10
+b	2	20	NA	22	20	22	20
+c	3	30	NA	33	30	33	30" | stat.edger_interact - ctr trt log
+
+}
+
+stat.lineartrend(){
+cmd='
+from scipy.stats.stats import pearsonr
+from scipy.stats import chi2
+import sys
+
+def test_lineartrend(x1,y1,x2,y2):
+	if len(x1) < 2 or len(x2) < 2 or sum(y1) == 0 or sum(y2) == 0:
+		raise ValueError
+	sx = [];
+	sy = [];
+	for i in range(len(x1)):
+			for j in range(y1[i]):
+				sx.append(x1[i]);
+				sy.append(1); 
+	for i in range(len(x2)):
+			for j in range(y2[i]):
+				sx.append(x2[i]);
+				sy.append(2);
+	if len(set(sx)) == 1 :
+		return 0,1;
+	r,pval = pearsonr(sx,sy);
+	s = r*r*(len(sx)-1);
+	pval = 1-chi2.cdf(s,1)
+	return r,pval
+
+def s2a(x):
+	return [ int(float(x)) for x in x.split(",")];
+
+for line in sys.stdin:
+	if line[0] == "#":
+		print line.rstrip();
+		continue;
+	a = line.rstrip().split("\t");
+	x1,y1,x2,y2 = map(s2a, a[1:]);
+	try:
+		r,p = test_lineartrend(x1,y1,x2,y2)
+		#r,p = test_lineartrend(x2,y2,x1,y1)
+		print "\t".join(map(str,a + [r,p]))
+	except ValueError:
+		1
+'
+	tmpd=`mymktempd`;	
+	echo "$cmd" > $tmpd/cmd
+	cat $1 | python $tmpd/cmd 
+	rm -rf $tmpd
+	#| awk -v OFS="\t" 'BEGIN{print "id","x1","y1","x2","y2","r","pval";}{ print $0;}' \
+}
+stat.lineartrend.test(){
+echo	"id1	1,2,3	10,20,30	1,2,3	300,200,100" \
+| stat.lineartrend - 
+}
+
 stat.rfuncs(){
 echo '
 	calc_ks=function(x,y){
@@ -118,6 +223,25 @@ b	3	4
 a	10	20
 b	30	40" | stat.sum - 
 }
+
+stat.merge(){
+	cmd='files=c('`quote $@ | tr " " ","`');
+	d=NULL;
+	for( f in files){
+		tt=read.table(f,header=T);
+		if(is.null(d)){
+			d=tt;
+		}else{
+			d=merge(d,tt,by=1,all=T);
+		}
+	}
+	d[is.na(d)]=0;
+	write.table(d,file="stdout",col.names=T,row.names=F,quote=F,sep="\t");
+	'
+	run_R "$cmd";
+
+}
+
 stat.prep(){
 usage="
 FUNCT: make a merged table with headers 
@@ -169,6 +293,41 @@ c	3	30	33	30	33	30" > exp
 	stat.prep trt1,trt2 ctr1  > obs
 	check exp obs
 	rm -rf trt1 trt2 ctr1 exp obs
+}
+stat.gix2gixx(){
+usage(){ echo "
+ $FUNCNAME <file> 
+  <file> : group_id id count1 [count2 ..]
+"
+}
+if [ $# -ne 1 ];then  usage; return; fi
+cat $1 | perl -e 'use strict;
+        my %d=(); my %dt=();
+        while(<STDIN>){ chomp;
+                my ($g,$i,@x) = split /\t/,$_;
+		if( !defined $d{$g} ){
+			@{$d{$g}}=();
+			@{$dt{$g}}=();
+		}
+                push @{$d{$g}}, [$g, $i, @x];
+		for( my $i=0; $i < scalar @x; $i++){
+			$dt{$g}[$i] += $x[$i];
+		}
+        }
+        foreach my $g (keys %d){
+	my @b=@{$dt{$g}};
+	foreach my $ae (@{$d{$g}}){
+		my ($gi,$id,@x)=@$ae; 
+		print $gi,"\t",$id,"\t",join("\t",@x),"\t",join("\t",@b),"\n";
+        }}
+'
+}
+stat.gix2gixx.test(){
+echo \
+"g1	id1	1	11
+g1	id2	2	22
+g2	id3	3	33" \
+| stat.gix2ixx - 
 }
 stat.gix2gixnx(){
 usage="
@@ -272,12 +431,37 @@ min(){
 	awk 'NR == 1 { min=$1;} { if($1 < min) min=$1;} END { print min;}'	
 }
 
-cor(){
-        cat $1 | R --no-save -q -e 'tt=read.table("stdin",header=F);cor(tt[,1],tt[,2],method="spearman" );' \
-        | perl -ne 'chomp;if($_=~/\[1\] ([\-|\d|\.]+)/){print $1;}'
+stat.cor(){
+usage(){ echo \
+" $FUNCNAME <file> [<method>]
+	<file>: two columns of values
+	<method>: pearson, kendall, spearman (default)
+"
+}
+if [ $# -lt 1 ];then usage; return; fi
+	local m=${2:-spearman};
+	cat $1 | run_R ' 
+		tt=read.table("stdin",header=F);
+		cor(tt[,1],tt[,2],method="'$m'" );' \
+	|perl -ne 'chomp;if($_=~/\[1\] ([\-|\d|\.]+)/){print $1,"\n";}'
 }
 
-cor_to_hclust(){
+stat.cor.test(){
+echo \
+"1	2
+2	4
+3	5"  | stat.cor -
+}
+
+stat.hclustwcor(){
+usage(){
+echo " $FUNCNAME <file> <out>
+	<file> : id1 id2 correlation
+
+"
+}
+	if [ $# -ne  2 ];then usage; return; fi
+	local tmpd=`mymktempd`;
 	cmd='
 		tt=read.table("stdin",header=F);
 		x=as.character(unique(c(as.character(tt[,1]),as.character(tt[,2]))));
@@ -286,16 +470,23 @@ cor_to_hclust(){
 		tt[,3]=1-tt[,3];
 		d=as.dist(xtabs(tt[, 3] ~ tt[,2] + tt[,1]));
 		d;
-		png("cor.png"); plot(hclust(d));dev.off();
+		png("'$2'"); plot(hclust(d));dev.off();
 	'
-	cut -f 1 $1  > a
-	cut -f 2 $1 >> a
-	rm -f b;
-	for f in `sort -u a`;do
-		echo -e "$f\t$f\t1" >> b;
+	cat $1 > $tmpd/i
+	cut -f 1 $tmpd/i  > $tmpd/a
+	cut -f 2 $tmpd/i >> $tmpd/a
+	for f in `sort -u $tmpd/a`;do
+		echo -e "$f\t$f\t1" >> $tmpd/b;
 	done
-	cat $1 b | sort -k1,2| run_R "$cmd"
-	rm -rf a b
+	head $tmpd/*
+	cat $tmpd/i $tmpd/b | sort -k1,2| run_R "$cmd"
+	rm -rf $tmpd
+}
+stat.hclustwcor.test(){
+echo \
+"A	B	1
+A	C	0.5
+B	C	0.3" | stat.hclustwcor - tmp.png 
 }
 
 pcombine_fisher(){
@@ -369,7 +560,7 @@ USAGE: $FUNCNAME <stat.prep> [<bcv>]
 	cat $1 | run_R '
 	tt=read.table("stdin",header=T);
 	cn=colnames(tt)[2:ncol(tt)];
-	group=rep(1,length(cn)); group[ grep("trt",cn)]=2;
+	group=rep(1,length(cn)); group[ grep("^trt",cn)]=2;
 	event=rep(1,length(cn)); event[ grep(".c2",cn)]=2;
 	library(edgeR)
 	if( length(grep("trt",cn)) == 1 || length(grep("ctr",cn)) == 1){
@@ -399,7 +590,7 @@ USAGE: $FUNCNAME <stat.prep> [<bcv>]
 		res=data.frame(tt, logFC=llh$table$logFC, pval=llh$table$PValue)
 		## chrom start end logFC pval
 		write.table(res,file="stdout", col.names=T,row.names=F,sep="\t",quote=F);
-	}'  
+	}' 
 }
 stat.edger.test(){
 echo \
@@ -415,47 +606,6 @@ b	2	20	22	20
 c	3	30	33	30" | stat.edger -
 }
 
-stat.edger_test(){
-	## INPUT: comma separated control and treatment EI file ( bed6 + x + nx )
-	## OUTPUT: bed6 + logFC + pvalue 
-	cat $1 | run_R '
-	tt=read.table("stdin",header=T);
-	cn=colnames(tt)[2:ncol(tt)];
-	group=rep(1,length(cn)); group[ grep("trt",cn)]=2;
-	event=rep(1,length(cn)); event[ grep(".c2",cn)]=2;
-	
-		
-	#ix=apply(D[,7:ncol(D)], 1, min) > 0 & apply(D[,7:ncol(D)],1,max) > 10
-	library(edgeR)
-	y=DGEList(counts=tt[,2:ncol(tt)],group=factor(group));
-	y=calcNormFactors(y);
-
-	event.this=factor(event);
-	group.this=factor(group);
-	H1 <- model.matrix(~ event.this + group.this + event.this:group.this, data=y$samples )
-	H0 <- model.matrix(~ event.this + group.this )
-	coef <- (ncol(H0)+1):ncol(H1)
-	#y=estimateCommonDisp(y)
-	#y=estimateTagwiseDisp(y, trend="movingave")
-	y = estimateGLMCommonDisp(y,H1);
-	y = estimateGLMTrendedDisp(y,H1);
-	y = estimateGLMTagwiseDisp(y,H1);
-
-	fit=glmFit(y$counts, H1, y$tagwise.dispersion,offset=0,prior.count=0)
-	llh=glmLRT(fit,coef=coef)
-
-	res=data.frame(tt, logFC=llh$table$logFC, pval=llh$table$PValue)
-	## chrom start end logFC pval
-	write.table(res,file="stdout", col.names=T,row.names=F,sep="\t",quote=F);
-	' $2
-}
-stat.edger_test.test(){
-echo \
-"id	trt1.c1	trt1.c2	trt2.c1	trt2.c2	ctr1.c1	ctr1.c2
-a	1	10	11	10	11	10
-b	2	20	22	20	22	20
-c	3	30	33	30	33	30" | stat.edger_test -
-}
 
 stat.edger_norep(){
 if [ $# -ne 2 ];then
@@ -491,70 +641,17 @@ c	3	30	33	30	33	30" | stat.edger_test -
 
 stat.padjust(){
 usage="
-usage: $FUNCNAME <file> <pvalue_index>
+usage: $FUNCNAME <file> 
 "
-if [ $# -ne 2 ]; then echo "$usage"; return; fi
+if [ $# -ne 1 ]; then echo "$usage"; return; fi
 cmd='
-	pcol=PCOL;
-	tt=read.table("stdin",header=F);
-	if( pcol < 0){
-		pcol = ncol(tt) + pcol + 1;
-	}
-	tt$fdr=p.adjust(tt[,pcol],method="fdr");
-        write.table(file="stdout",tt,row.names=F,col.names=F,quote=F,sep="\t");
+	tt=read.table("stdin",header=T);
+	tt$fdr=p.adjust(tt$pval,method="fdr");
+        write.table(file="stdout",tt,row.names=F,col.names=T,quote=F,sep="\t");
 '
-	cmd=${cmd/PCOL/$2};
 	cat $1 | run_R "$cmd"
 }
 
-lineartrend_test(){
-cmd='
-from scipy.stats.stats import pearsonr
-from scipy.stats import chi2
-import sys
-
-def test_lineartrend(x1,y1,x2,y2):
-	if len(x1) < 2 or len(x2) < 2 or sum(y1) == 0 or sum(y2) == 0:
-		raise ValueError
-	sx = [];
-	sy = [];
-	for i in range(len(x1)):
-			for j in range(y1[i]):
-				sx.append(x1[i]);
-				sy.append(1); 
-	for i in range(len(x2)):
-			for j in range(y2[i]):
-				sx.append(x2[i]);
-				sy.append(2);
-	if len(set(sx)) == 1 :
-		return 0,1;
-	r,pval = pearsonr(sx,sy);
-	s = r*r*(len(sx)-1);
-	pval = 1-chi2.cdf(s,1)
-	return r,pval
-
-def s2a(x):
-	return [ int(float(x)) for x in x.split(",")];
-
-for line in sys.stdin:
-	if line[0] == "#":
-		print line.rstrip();
-		continue;
-	a = line.rstrip().split("\t");
-	x1,y1,x2,y2 = map(s2a, a[1:]);
-	try:
-		#r,p = test_lineartrend(x1,y1,x2,y2)
-		r,p = test_lineartrend(x2,y2,x1,y1)
-		print "\t".join(map(str,a + [r,p]))
-	except ValueError:
-		1
-'
-	tmpd=`mymktempd`;	
-	echo "$cmd" > $tmpd/cmd
-	cat $1 | python $tmpd/cmd 
-	rm -rf $tmpd
-	#| awk -v OFS="\t" 'BEGIN{print "id","x1","y1","x2","y2","r","pval";}{ print $0;}' \
-}
 
 
 fisher_test(){

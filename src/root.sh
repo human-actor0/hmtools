@@ -118,16 +118,19 @@ cat $1 | perl -ne 'chomp;
 }
 
 mycat(){
+	skiphead(){
+		perl -ne 'chomp; next if($_=~/^#/); print $_,"\n";'
+	}
 	if [[ -d $1 ]];then
-		cat ${1%/}/*;
+		cat ${1%/}/* | skiphead;
         elif [[ ${1##*.} = "gz" ]];then
-                gunzip -dc $1;
+                gunzip -dc $1 | skiphead;
         elif [[ ${1##*.} = "bz2" ]];then
-                bunzip2 -dc $1;
+                bunzip2 -dc $1 | skiphead;
         elif [[ ${1##*.} = "zip" ]];then
-                unzip -p $1;
+                unzip -p $1 | skiphead;
         else
-                cat $1;
+                cat $1 | skiphead;
         fi
 }
 
@@ -187,10 +190,20 @@ usage: $FUNCNAME <Rscript> [flag]
 	fi
 	rm -rf $tmpd;
 }
-unset -f quote
+#unset -f quote
+#quote(){
+#	#perl -ne 'chomp; print join("'$del'", map{ "\"$_\"" } split( /\s+/,$_ )),"\n"';
+#	local a=( ${@/,/" "} ); a=( "${a[@]/#/\"}" ); a=( "${a[@]/%/\"}" ); echo "${a[*]}"
+#}
+
 quote(){
-	#perl -ne 'chomp; print join("'$del'", map{ "\"$_\"" } split( /\s+/,$_ )),"\n"';
-	local a=( ${@/,/" "} ); a=( "${a[@]/#/\"}" ); a=( "${a[@]/%/\"}" ); echo "${a[*]}"
+	local a=( $@ );
+	a=( ${a[@]/#/\"} )
+	echo ${a[@]/%/\"}
+}
+quote.test(){
+	local a=" a b c ";
+	quote "$a";
 }
 
 # array=( "${array[@]/%/_content}" )

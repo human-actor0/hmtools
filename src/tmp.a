@@ -1,2 +1,9 @@
-chr1;11117471;11117580;n1;0;+	tcccgagtagttgggattacaggcgcacgccaccaagctgggccatttttttttttttttttttatttttagtagagaccttgtgatctgcccgcctcagcctcccaga
-chr1;11117480;11117589;n1;0;-	tctcagcactctgggaggctgaggcgggcagatcacaaggtctctactaaaaataaaaaaaaaaaaaaaaaaatggcccagcttggtggcgtgcgcctgtaatcccaac
+chr1	100	200	s	1	+
+chr1	100	150	s	10	+
+chr1	151	200	s	11	+
+chr1	100	120	s	2	+
+chr1	140	200	s	3	+
+chr1	100	160	s	4	+
+chr1	180	200	s	5	+
+chr1	100	101	u	6	+
+chr1	119	120	u	7	+

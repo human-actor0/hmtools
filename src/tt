@@ -1,0 +1,4 @@
+chrom@start@end@left.exon@right.exon@strand@ctr@trt	ctr1.c1	ctr1.c2	trt1.c1	trt1.c2
+chr1@159@181@100@200@+@1,4,5,6,0,0,0	1	9	1	9
+chr1@119@141@100@200@+@1,2,3,6,7,0,0	8	5	8	5
+chr1@149@152@100@200@+@1,10,11,6,0,0,0	1	21	1	21

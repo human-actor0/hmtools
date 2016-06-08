@@ -93,7 +93,7 @@ done
 shift $(( OPTIND -1 ))
 if [ $# -lt 1 ];then usage; return; fi
 	if [ $h = 1 ];then
-		echo "# d=$1 files=[ ${@:1} ]";
+		echo "# d=$d files=[ ${@:1} ]";
 	fi
 	local tmpd=`mymktempd`;
 	local files=( ${@:1} );	
