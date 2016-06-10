@@ -3,6 +3,73 @@
 . $HMHOME/src/stat.sh
 
 
+bed.exon(){
+usage="
+USAGE: $FUNCNAME <bed12>
+"
+if [ $# -ne 1 ];then echo "$usage"; return; fi
+	mycat $1 | perl -ne 'chomp;my @a=split/\t/,$_;
+		my @sizes=split/,/,$a[10];	
+		my @starts=split/,/,$a[11];	
+		my $n=$a[9];
+		my @idx=();
+		if($a[5] eq "+"){
+			@idx=sort { $starts[$a] <=> $starts[$b] } 0..($n-1);
+		}else{
+			@idx=sort { $starts[$b] <=> $starts[$a] } 0..($n-1);
+		}
+		my $id=1;
+		foreach my $i (@idx){
+			print join("\t",($a[0],$a[1]+$starts[$i],$a[1]+$starts[$i]+$sizes[$i],$a[3].".exon".$id."/".$n,0,$a[5])),"\n";
+			$id++;
+		}
+		
+	'
+#	mycat $1 | awk -v OFS="\t" '{ split($11,sizes,",");split($12,starts,",");
+#		for(i=1; i<=$10; i++){
+#	    		s=$2+starts[i]; e=s+sizes[i];
+#			print $1,s,e,$4,$5,$6;
+#		}
+#	}'
+	
+}
+
+bed.lastexon(){
+## not tested
+	bed.exon $@ | perl -ne 'chomp; if ($_=~/\.exon(\d+)\/(\d+)/ && $1==$2){ print $_,"\n";}'
+}
+
+bed.3utr(){
+usage="$FUNCNAME <bed12>"
+if [ $# -lt 1 ];then echo "$usage"; return; fi
+	#$chr,,$start,,$end,,$name,,$score,,$strand,,$thickStart,,$thickEnd,,$itemRgb,,$blockCount,;
+	awk -v OFS="\t" '{
+		split($11,l,",");
+		split($12,s,",");
+		coding=1;
+		if( $7 == $8) coding=0; ## noncoding or pseudo genes
+		if($6=="+"){
+			start=$2+s[$10]; end=start+l[$10];
+			## [     ]====
+			## start $8    
+			if(coding && $8 > start) start=$8;
+		}else{
+			start=$2; end=start+l[1]; 
+			## =======[     ],   ===   ====[    ] 
+			##        $7   end    end     $7
+			if(coding && $7 < end ) end=$7;
+		}
+		#if(coding && end > start) ## remove coding end points
+			print $1,start,end,$4".3utr",$5,$6;
+	}' $1 | sort -u;
+}
+bed.3utr.test(){
+## ====    ===[     ]---
+## ====        (o)
+## =========== (x)
+echo \
+"chr1	1152310	1167411	ENSG00000078808	0	-	1154000	1164173	255,0,0	7	874,176,175,114,137,479,140,	0,1527,1838,6313,6901,11537,14961," | bed.3utr - 
+}
 
 bed.group(){
 usage(){ echo "
@@ -37,26 +104,6 @@ bed.longestgene(){
 usage="$FUNCNAME <bed>"
 	awk -v OFS="\t" '{ print $1","$4","$6, $2, $3;}' $1 | bed.sort - | mergeBed \
 	| tr "," "\t" | awk -v OFS="\t" '{ print $1,$4,$5,$2,0,$3;}'
-}
-bed.3utr(){
-usage="$FUNCNAME <bed12>"
-if [ $# -lt 1 ];then echo "$usage"; return; fi
-	#$chr,,$start,,$end,,$name,,$score,,$strand,,$thickStart,,$thickEnd,,$itemRgb,,$blockCount,;
-	awk -v OFS="\t" '{
-		split($11,l,",");
-		split($12,s,",");
-		coding=1;
-		if( $7 == $8) coding=0; ## noncoding or pseudo genes
-		if($6=="+"){
-			start=$2+s[$10]; end=start+l[$10];
-			if(coding) start=$8;
-		}else{
-			start=$2; end=start+l[1]; 
-			if(coding) end=$7;
-		}
-		#if(coding && end > start) ## remove coding end points
-			print $1,start,end,$4,$5,$6;
-	}' $1 | sort -u;
 }
 
 bed.split_byname(){
@@ -801,28 +848,7 @@ check obs exp
 rm t a obs exp
 }
 
-bed12_to_lastexon(){
-## not tested
-	awk -v OFS="\t" '{ split($11,sizes,",");split($12,starts,",");
-	    if($6=="+"){ i=$10;}else{ i=1;}
-	    s=$2+starts[i]; e=s+sizes[i];
-	    print $1,s,e,$4,i,$6;
-	}' $1
-}
 
-bed.exon(){
-usage="
-USAGE: $FUNCNAME <bed12>
-"
-if [ $# -ne 1 ];then echo "$usage"; return; fi
-	mycat $1 | awk -v OFS="\t" '{ split($11,sizes,",");split($12,starts,",");
-		for(i=1; i<=$10; i++){
-	    		s=$2+starts[i]; e=s+sizes[i];
-			print $1,s,e,$4,$5,$6;
-		}
-	}'
-	
-}
 
 
 bed.intron(){
