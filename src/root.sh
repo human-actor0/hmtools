@@ -122,15 +122,15 @@ mycat(){
 		perl -ne 'chomp; next if($_=~/^#/); print $_,"\n";'
 	}
 	if [[ -d $1 ]];then
-		cat ${1%/}/* | skiphead;
+		cat ${1%/}/* 
         elif [[ ${1##*.} = "gz" ]];then
-                gunzip -dc $1 | skiphead;
+                gunzip -dc $1 
         elif [[ ${1##*.} = "bz2" ]];then
-                bunzip2 -dc $1 | skiphead;
+                bunzip2 -dc $1 
         elif [[ ${1##*.} = "zip" ]];then
-                unzip -p $1 | skiphead;
+                unzip -p $1 
         else
-                cat $1 | skiphead;
+                cat $1 
         fi
 }
 

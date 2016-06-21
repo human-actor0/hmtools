@@ -2,7 +2,7 @@
 
 
 fq.flat(){
-	awk '{printf("%s\t",$0); if(NR%4==0){ printf("\n");}}' $1;
+	awk '{printf("%s",$0); if(NR%4==0){ printf("\n");}else{ printf("\t");}}' $1;
 }
 fq.filter5(){
 usage="
@@ -33,9 +33,11 @@ fq.cut3(){
 if [ $# -lt 2 ];then echo "
 $FUNCNAME <fastq> <3adapter> <mis>
 ";fi
-	mycat $1 | fq.flat - | perl -ne 'BEGIN{ $T=0;$T1=0;} chomp; my $a="'$2'"; my $S=1; my $M='${3:-0}';
-		my ($id,$s,$o,$q)=split/\t/,$_;
-		#print $_," ",$a," ",length($s)," ",length($a),"\n";
+	mycat $1 | fq.flat - \
+	| perl -e 'use strict; 
+	my $a="'$2'"; my $S=1; my $M='${3:-0}';
+	my $T=0; my $T1=0; 
+	while(<STDIN>){chomp; my ($id,$s,$o,$q)=split/\t/,$_;
 		$T++;
 		for(my $i=$S; $i<length($s)-length($a)+1+$M;$i++){
 			my $m=0;
@@ -54,7 +56,8 @@ $FUNCNAME <fastq> <3adapter> <mis>
 				last;
 			}
 		}
-		END{ print {*STDERR} print "$T1/$T passed\n";}
+	}
+	print {*STDERR} $T1,"/",$T," passed\n";
 	'
 
 }
@@ -64,15 +67,26 @@ echo \
 "@a
 CGGGCTTGAACACG
 +
-IIIIIIIIIIIIII" > tmp.a
-cat tmp.a
+IIIIIIIIIIIIII
+@SRR1575919.1 NS500144:32:H0N5VAGXX:1:11101:2679:1044 length=76
+NGGAANAAAGAAAGGCAGACTGCCACATGCAGCGCCTCATTTAATCTCGTATGCCGTCTTCTGCTTGAAAAAAAAC
++SRR1575919.1 NS500144:32:H0N5VAGXX:1:11101:2679:1044 length=76
+#AA<A#FFFFFFFFFFFF)FFFFF.FFFFF<AFFFFFFAF<FF.<AAF<F.AAAFAFFAAF<AFFF7.FFFF7A..
+@SRR1575919.2 NS500144:32:H0N5VAGXX:1:11101:12351:1046 length=76
+NACATNAAGCCTACAGCACCCGGTATCTAGTATGCCGTCTTCTGCTTGAAAAAAAAAAGGGGGGGGGGGGGGGGGG
++SRR1575919.2 NS500144:32:H0N5VAGXX:1:11101:12351:1046 length=76
+#AAAA#FFFFFFFFFFF7FFFFFFFAF<)F<<FF)FFF7.FF.7F)FAFFFFFFFFF77FFFFFFFFFFFFFFFFF
+@a
+CGGGCTTGAACACG
++
+IIIIIIIIIIIIII"  > tmp.a
 
 #fq.cut3 tmp.a GAAC 
 #fq.cut3 tmp.a GAACACG 
-#fq.cut3 tmp.a AGAACACG 1 
+fq.cut3 tmp.a AGAACACG 1 
 fq.cut3 tmp.a GAACACGT 0 
-fq.cut3 tmp.a GAACACGT 1 
-rm tmp.a
+#fq.cut3 tmp.a GGGGGGG 0 
+#rm tmp.a
 }
 
 
