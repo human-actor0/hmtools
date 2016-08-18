@@ -76,7 +76,9 @@ import (
 func main() {
 	var adapt string="'$2'";
 	var bufs []string 
-	file, err := os.Open("'$1'")
+	//file, err := os.Open(os.Stdin)
+	//if err != nil { log.Fatal(err) }
+	//defer file.Close()
 	var misMatch int = '${3:-0}';
 	fmt.Println(misMatch);
 	var minLen int=0; _ = minLen;
@@ -84,9 +86,8 @@ func main() {
 	var line_num int = 0;
 	var i,j,m int; _,_,_ = i,j,m;
 
-	if err != nil { log.Fatal(err) }
-	defer file.Close()
-    	scanner := bufio.NewScanner(file)
+    	//scanner := bufio.NewScanner(file)
+    	scanner := bufio.NewScanner(os.Stdin)
     for scanner.Scan() {
 	var line string=scanner.Text();
 	bufs = append(bufs,line);
@@ -121,7 +122,7 @@ if [ $# -lt 2 ];then
 	echo "$usage"; return;
 fi
 local tmp=`mymktempd`; echo "$cmd" > $tmp/script.go;
-go run $tmp/script.go
+cat $1 | go run $tmp/script.go
 
 }
 fq.cut3.test(){
