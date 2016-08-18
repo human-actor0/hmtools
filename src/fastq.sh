@@ -69,7 +69,7 @@ package main
 import (
     "bufio"
     "fmt"
-	"strings"
+	//"strings"
 	"log"
     "os"
 )
@@ -79,8 +79,7 @@ func main() {
 	//file, err := os.Open(os.Stdin)
 	//if err != nil { log.Fatal(err) }
 	//defer file.Close()
-	var misMatch int = '${3:-0}';
-	fmt.Println(misMatch);
+	var misMatch int = '${3:-0}'; //fmt.Println(misMatch);
 	var minLen int=0; _ = minLen;
 	var minMatch int=len(adapt) - misMatch; _=minMatch;
 	var line_num int = 0;
@@ -99,12 +98,11 @@ func main() {
 				//fmt.Printf("comp %s %s %d\n",bufs[1][(i+j):], adapt[j:],m);
 			}
 			if m >= minMatch {
-				//fmt.Println(i);
-				//fmt.Printf("%s\n",bufs[0])
+				fmt.Printf("%s\n",bufs[0])
 				fmt.Printf("%s\n",bufs[1][:i])
-				//fmt.Printf("%s\n",bufs[2])
-				//fmt.Printf("%s\n",bufs[3][:i],"\n")
-				fmt.Printf("%s\n",strings.Join(bufs,"\n"))
+				fmt.Printf("%s\n",bufs[2])
+				fmt.Printf("%s\n",bufs[3][:i])
+				//fmt.Printf("%s\n",strings.Join(bufs,"\n"))
 				break; }
 		}
 		bufs= nil;
@@ -145,7 +143,7 @@ CGGGCTTGAACACG
 IIIIIIIIIIIIII"  > tmp.a
 
 fq.cut3_go tmp.a GAAC  
-fq.cut3_go tmp.a GAAC  1
+cat tmp.a | fq.cut3_go - GAAC  1
 #fq.cut3 tmp.a GAAC 
 #fq.cut3 tmp.a GAACACG 
 #fq.cut3 tmp.a AGAACACG 1 
