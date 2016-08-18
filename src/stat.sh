@@ -1,56 +1,52 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
 
-stat.edger_interact(){
-usage(){ echo "
-$FUNCNAME <table> <ctr_col> <trt_col> [option]
-"
-}
-	if [ $# -lt 3 ];then usage;return; fi
+stat.prop_test(){
+usage(){
+	echo "
+	$FUNCNAME <txt> <header>
+	<header> : T or F
+	"
+}; if [ $# -lt 1 ];then usage;return; fi
 	cat $1 | run_R '
-	library(edgeR)
-	CTR="^'$2'"; TRT="^'$3'"; 
-	tt=read.table("stdin",header=T,check.names=F);
-	cn=colnames(tt);
-	m=tt[,c(grep(CTR,cn), grep(TRT,cn))];
+		H='${2:-"F"}';
+		tt=read.table("stdin",header=H);
+		if(!H){ colnames(tt)=c("ID","CTR.cnt","TRT.cnt","CTR.tot","TRT.tot"); }
+		# global total counts
+		pval=apply(tt[,-1],1,function(x){
+			p=1;
+			if( sum(x > 0) == 4 && sum(x[3:4]==x[1:2]) < 2){
+				p=prop.test(x[1:2],n=x[3:4])$p.value;
+			}
+			return(p);
+		})
 
-	m.cn=colnames(m);
-	group=rep(1,length(m.cn)); 
-	group[ grep(CTR,m.cn)]=1;
-	group[ grep(TRT,m.cn)]=2;
-	event=rep(1,length(m.cn)); event[ grep(".c2",m.cn)]=2;
-	
-	y=DGEList(counts=m,group=factor(group));
-	y=calcNormFactors(y);
-
-	event.this=factor(event);
-	group.this=factor(group);
-	H1 <- model.matrix(~ event.this + group.this + event.this:group.this, data=y$samples )
-	H0 <- model.matrix(~ event.this + group.this )
-	coef <- (ncol(H0)+1):ncol(H1)
-	#y=estimateCommonDisp(y)
-	#y=estimateTagwiseDisp(y, trend="movingave")
-	y = estimateGLMCommonDisp(y,H1);
-	y = estimateGLMTrendedDisp(y,H1);
-	y = estimateGLMTagwiseDisp(y,H1);
-
-	fit=glmFit(y$counts, H1, y$tagwise.dispersion,offset=0,prior.count=0)
-	llh=glmLRT(fit,coef=coef)
-	nn=paste("logFC",TRT,"/",CTR,sep="")
-	tt[[nn]]=llh$table$logFC;
-	tt[["pval"]]=llh$table$PValue;
-	##res=data.frame(tt, nn=llh$table$logFC, pval=llh$table$PValue)
-	## chrom start end logFC pval
-	write.table(tt,file="stdout", col.names=T,quote=F,row.names=F,sep="\t");
-	' 
+		relFC=apply(tt[,-1],1,function(x){
+			x1=x+0.5;##pseudo counting
+			return(log2( x1[2]*x1[3]/(x1[1]*x1[4])));
+		})
+		#totFC=log2( (tt[,5]+0.5)*sum(tt$CTR.N)/(tt[,4]+0.5)/sum(tt$TRT.N));
+		tt[[ "log2_TRT/CTR" ]]=relFC;
+		#tt$log2TFC=totFC;
+		tt$pval=pval;
+		write.table(tt,file="stdout",col.names=T,row.names=F,quote=F,sep="\t");
+	'
 }
-stat.edger_interact.test(){
+stat.prop_test.test(){
+echo  \
+"ID	CTR.cnt	TRT.cnt	CTR.tot	TRT.tot
+A	1	2	10	30
+B	0	2	10	30
+C	1	2	1	2
+D	0	0	2	10
+E	1	2	1	19" \
+| stat.prop_test - T  
+}
+stat.edger_test.test(){
 echo \
-"x@trt@ctr	trt1.c1	trt1.c2	trc.c1	trt2.c1	trt2.c2	ctr1.c1	ctr1.c2
-a	1	10	NA	11	10	11	10
-b	2	20	NA	22	20	22	20
-c	3	30	NA	33	30	33	30" | stat.edger_interact - ctr trt log
-
+"a	1	10	11	10	11	10
+b	2	20	22	20	22	20
+c	3	30	33	30	33	30" | stat.edger_test -
 }
 
 stat.lineartrend(){
@@ -203,8 +199,9 @@ echo \
 }
 
 stat.sum(){
-	cat $1 | perl -e 'use strict; my %res=();
+	cat $1 | perl -e 'use strict; my %res=(); my $H='${2:-"0"}';
 	while(<STDIN>){ chomp; my @a=split/\t/,$_;
+		if($H > 0 ){ print $_,"\n"; $H--;next;}
 		if(!defined $res{$a[0]}){
 			$res{$a[0]} = ();
 		}	
@@ -607,37 +604,6 @@ c	3	30	33	30" | stat.edger -
 }
 
 
-stat.edger_norep(){
-if [ $# -ne 2 ];then
-	echo \
-"USAGE $FUNCNAME <txt> <BCV>
-	<BCV>: 0.4: human data, 0.1: genetically identical, 0.01: technical replicates (edgeRUsersGuide)
-"
-return;
-fi
-	cat $1 | run_R '
-		require(edgeR);
-		tt=read.table("stdin",header=T);
-		head(tt);
-		bcv = '$2';
-		y = DGEList(counts=tt[,2:3],group=c(2,1))
-		et = exactTest(y, dispersion=bcv^2)	
-		write.table(file="stdout",cbind(tt,et$table),quote=F,sep="\t",row.names=F);
-	'
-}
-stat.edger_norep.test(){
-echo \
-"id	trt1.c1	ctr1.c1
-a	2	3
-b	4	19" | stat.edger_norep - 0.2
-}
-stat.edger_test.test(){
-echo \
-"id	trt1.c1	trt1.c2	trt2.c1	trt2.c2	ctr1.c1	ctr1.c2
-a	1	10	11	10	11	10
-b	2	20	22	20	22	20
-c	3	30	33	30	33	30" | stat.edger_test -
-}
 
 stat.padjust(){
 usage="

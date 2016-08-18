@@ -62,29 +62,93 @@ $FUNCNAME <fastq> <3adapter> <mis>
 
 }
 
+fq.cut3_go(){
+usage="$FUNCNAME <input> <3adaptor> [<num_mis_match>]";
+local cmd='
+package main
+import (
+    "bufio"
+    "fmt"
+	"strings"
+	"log"
+    "os"
+)
+func main() {
+	var adapt string="'$2'";
+	var bufs []string 
+	file, err := os.Open("'$1'")
+	var misMatch int = '${3:-0}';
+	fmt.Println(misMatch);
+	var minLen int=0; _ = minLen;
+	var minMatch int=len(adapt) - misMatch; _=minMatch;
+	var line_num int = 0;
+	var i,j,m int; _,_,_ = i,j,m;
+
+	if err != nil { log.Fatal(err) }
+	defer file.Close()
+    	scanner := bufio.NewScanner(file)
+    for scanner.Scan() {
+	var line string=scanner.Text();
+	bufs = append(bufs,line);
+	if len(bufs) == 4 {
+		for i := len(bufs[1])-1; i >= 0; i--{
+			m = 0;
+			for j :=0; j< len(adapt) && i+j < len(bufs[1]); j++{
+				if bufs[1][i+j] == adapt[j] { m ++;}
+				//fmt.Printf("comp %s %s %d\n",bufs[1][(i+j):], adapt[j:],m);
+			}
+			if m >= minMatch {
+				//fmt.Println(i);
+				//fmt.Printf("%s\n",bufs[0])
+				fmt.Printf("%s\n",bufs[1][:i])
+				//fmt.Printf("%s\n",bufs[2])
+				//fmt.Printf("%s\n",bufs[3][:i],"\n")
+				fmt.Printf("%s\n",strings.Join(bufs,"\n"))
+				break; }
+		}
+		bufs= nil;
+	}
+
+	line_num ++;
+    }
+
+    if err := scanner.Err(); err != nil {
+        log.Fatal(err)
+    }
+}
+'
+if [ $# -lt 2 ];then
+	echo "$usage"; return;
+fi
+local tmp=`mymktempd`; echo "$cmd" > $tmp/script.go;
+go run $tmp/script.go
+
+}
 fq.cut3.test(){
 echo \
 "@a
 CGGGCTTGAACACG
 +
 IIIIIIIIIIIIII
-@SRR1575919.1 NS500144:32:H0N5VAGXX:1:11101:2679:1044 length=76
-NGGAANAAAGAAAGGCAGACTGCCACATGCAGCGCCTCATTTAATCTCGTATGCCGTCTTCTGCTTGAAAAAAAAC
-+SRR1575919.1 NS500144:32:H0N5VAGXX:1:11101:2679:1044 length=76
+@b
+NGGAANAAAGAAAGGCAGACTGCCAGAACCAGCGCCTCATTTAATCTCGTATGCCGTCTTCTGCTTGAAAAAGAAT
++
 #AA<A#FFFFFFFFFFFF)FFFFF.FFFFF<AFFFFFFAF<FF.<AAF<F.AAAFAFFAAF<AFFF7.FFFF7A..
-@SRR1575919.2 NS500144:32:H0N5VAGXX:1:11101:12351:1046 length=76
-NACATNAAGCCTACAGCACCCGGTATCTAGTATGCCGTCTTCTGCTTGAAAAAAAAAAGGGGGGGGGGGGGGGGGG
-+SRR1575919.2 NS500144:32:H0N5VAGXX:1:11101:12351:1046 length=76
+@c
+NAGAACAAGCCTACAGCACCCGGTATCTAGTATGCCGTCTTCTGCTTGAAAAAAAAAAGGGGGGGGGGGGGGGGGG
++
 #AAAA#FFFFFFFFFFF7FFFFFFFAF<)F<<FF)FFF7.FF.7F)FAFFFFFFFFF77FFFFFFFFFFFFFFFFF
-@a
+@d
 CGGGCTTGAACACG
 +
 IIIIIIIIIIIIII"  > tmp.a
 
+fq.cut3_go tmp.a GAAC  
+fq.cut3_go tmp.a GAAC  1
 #fq.cut3 tmp.a GAAC 
 #fq.cut3 tmp.a GAACACG 
-fq.cut3 tmp.a AGAACACG 1 
-fq.cut3 tmp.a GAACACGT 0 
+#fq.cut3 tmp.a AGAACACG 1 
+#fq.cut3 tmp.a GAACACGT 0 
 #fq.cut3 tmp.a GGGGGGG 0 
 #rm tmp.a
 }

@@ -64,7 +64,7 @@ echo 'kmers using bash to expand:' $s > /dev/stderr
 bash -c "echo  $s";     # let brace expanion of inferior bash compute the cross product
 }
 
-mutate(){
+seq.mut(){
 usage="$FUNCNAME <seq> <mutations>";
 	echo $1 | perl -ne 'chomp; my @seq=split //,$_;
 		my @b=("A","C","G","T");
@@ -81,11 +81,10 @@ usage="$FUNCNAME <seq> <mutations>";
 }
 
 
-
-test__mutate(){
+seq.mut.test(){
 echo \
 "AAAA CAAA GAAA TAAA ACAA AGAA ATAA AACA AAGA AATA AAAC AAAG AAAT" > exp
-mutate "AAAA" > obs
+seq.mutate "AAAA" > obs
 check obs exp
 rm obs exp
 }

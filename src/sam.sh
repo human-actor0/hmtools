@@ -1,6 +1,5 @@
 #!/bin/bash
 . $HMHOME/src/root.sh
-
 sam.csize(){
         if [ ! -f $1.bai ];then
 		echo "generating index $1.bai .. " >&2

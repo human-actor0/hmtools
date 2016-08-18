@@ -161,7 +161,7 @@ c	4	5	p3	10	+" > tmp.b
 	rm tmp.*
 }
 
-pa.cmp(){
+pa.test_lineartrend(){
 usage(){ echo \
 " $FUNCNAME [options] <3utr.bed> <ctr.bed> <trt.bed>
 	[options]:
@@ -194,7 +194,7 @@ if [ $# -ne 3 ];then usage; fi
 	}' | stat.lineartrend - \
 	| tr "@" "\t" | awk -v OFS="\t" '{ if($6=="-"){ $11=-$11;} } 1';
 }
-pa.cmp.test(){
+pa.test_lineartrend.test(){
 echo \
 "c	100	200	gene1	0	+
 c	300	400	gene2	0	+" > tmp.3utr
@@ -215,7 +215,7 @@ c	150	151	pa3	40	+
 c	310	311	pa4	50	+
 c	399	400	pa5	60	+" > tmp.trt
 head tmp.*
-pa.cmp -d 2 tmp.3utr tmp.ctr tmp.trt 
+pa.test_lineartrend -d 2 tmp.3utr tmp.ctr tmp.trt 
 rm tmp.*
 }
 
@@ -256,12 +256,48 @@ c	6	7	r4	0.01	+" | pa.cluster_sb - 1
 
 pa.point(){
 usage="
-$FUNCNAME <bam> <q>
-"; if [ $# -ne 2 ];then echo "$usage"; return; fi
-
-	samtools view -bq $2 $1 | bamToBed -split \
-	| bed.5p - | bed.ss - | awk -v OFS="@" '{ print $1,$2,$3,$6"\t"1;}' \
-	| stat.sum -  | tr "@" "\t" | awk -v OFS="\t" '{ print $1,$2,$3,".",$5,$4;}'
+$FUNCNAME <bed> <cleavage_point> <score>
+ <cleavage_point> : 
+	3rc : 3'end of reverse complemnt (default) 
+ <score>:
+	1 : treat 1 for all reads (default)
+"; if [ $# -lt 1 ];then echo "$usage"; return; fi
+	
+	cat $1 | perl -e 'use strict; 
+		my $C="'${2:-"3rc"}'"; 
+		my $S="'${3:-"1"}'";
+		my %res=();
+		while(<STDIN>){ chomp; my @a=split/\t/,$_;
+			my $st=$a[5];
+			my $sc=$a[4]; 
+			if($S eq "1"){ $sc=1;
+			}else{
+				print {*STDERR} "score,$S is not known\n";
+				exit(1);
+			}
+				
+			$sc=1 if $S eq "1";
+			if($C eq "3rc"){
+				my $p=$st eq "+" ? $a[1] : $a[2]-1;
+				$st =~ tr/-+/+-/;
+				$res{ $a[0]."\t".$p."\t".$st } += $sc;
+			}else{
+				print {*STDERR} "cleavage_point,$C is not known\n";
+				exit(1);
+			}
+		}
+		foreach my $k (keys %res){
+			my ($c,$p,$s) = split/\t/,$k;
+			print "$c\t$p\t",$p+1,"\t.\t",$res{$k},"\t",$s,"\n";
+		}
+	'
+}
+pa.point.test(){
+echo \
+"c	10	100	r1	1	+
+c	12	200	r2	2	-
+c	13	100	r3	3	+
+c	6	77	r4	0.01	-" | pa.point - 3rc 1 
 }
 
 pa.filter(){ 

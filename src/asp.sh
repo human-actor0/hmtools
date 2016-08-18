@@ -4,6 +4,271 @@
 . $HMHOME/src/bed.sh
 
 
+asp.m3ss_test(){
+cat $1 | perl -e 'use strict; my %H=(); 
+	my $ctr="'$2'"; my $trt="'$3'";
+	while(<STDIN>){chomp; my @a=split/\t/,$_; 
+		print join("@",@a);
+		if(scalar keys %H==0){ 
+			for( my $i=5; $i<= $#a; $i++){
+				if($a[$i] =~ /^$ctr/){
+					$H{ctr}{$i}=$a[$i];
+				}
+				if($a[$i] =~ /^$trt/){
+					$H{trt}{$i}=$a[$i];
+				}
+			}
+			foreach my $k (keys %{$H{ctr}}){
+				print "\t",$H{ctr}{$k},".c1\t",$H{ctr}{$k},".c2"
+			}
+			foreach my $k (keys %{$H{trt}}){
+				print "\t",$H{trt}{$k},".c1\t",$H{trt}{$k},".c2"
+			}
+			print "\n";
+			#print join (",",keys %{$H{ctr}}),"\n";
+			#print join (",",keys %{$H{trt}}),"\n";
+			next;
+		}	
+		my @x=split/,/,$a[2]; # 5 ss
+		foreach my $i (keys %{$H{ctr}}){
+			my ($ta,$tb)=split/;/,$a[$i];
+			my @s=split/,/,$ta;
+			my @u=split/,/,$tb;
+			my $usum=0; my $ssum=0;
+			for(my $j=0; $j<=$#x; $j++){
+				$ssum += $s[$j];	
+				if($x[$j] == $a[1]){
+					$usum = $u[$j];
+				}
+			}
+			print "\t",$usum,"\t",$ssum;
+		}
+		foreach my $i (keys %{$H{trt}}){
+			my ($ta,$tb)=split/;/,$a[$i];
+			my @s=split/,/,$ta;
+			my @u=split/,/,$tb;
+			my $usum=0; my $ssum=0;
+			for(my $j=0; $j<=$#x; $j++){
+				$ssum += $s[$j];	
+				if($x[$j] == $a[1]){
+					$usum = $u[$j];
+				}
+			}
+			print "\t",$usum,"\t",$ssum;
+		}
+		print "\n";
+
+	}
+' | stat.edger_interact - $2 $3
+}
+asp.m3ss_test.test(){
+echo \
+"chrom	3ss	5ss	num.5ss	strand	c4_3	e1_1	wt_1	wt_3	e1_2	wt_2	e1_3	c4_1	c4_2
+chr14	102474514	102473444,102474514	2	+	22,0;6,2	10,0;2,1	7,0;0,1	10,0;0,1	15,0;8,1	25,0;4,0	25,0;10,4	17,0;1,1	31,0;8,1
+chr14	105930752	105930483,105930752	2	+	29,0;2,0	20,0;6,3	24,0;2,2	25,0;4,3	35,0;6,6	71,0;12,7	137,0;30,13	12,0;6,3	49,0;2,3"\
+| asp.m3ss_test - wt c4
+
+}
+
+
+asp.group3ss(){
+	cat $1 | perl -e 'use strict; my %res=();
+	while(<STDIN>){chomp;my@a=split/\t/,$_;
+		my $k=$a[0]."\t".$a[6];	
+		if($a[5] eq "+"){ 
+			$res{$a[0]."\t".$a[5]."\t".($a[2]-1)}{$a[1]}{$a[3]}=$a[4];
+		}else{ 
+			$res{$a[0]."\t".$a[5]."\t".($a[1])}{$a[2]-1}{$a[3]}=$a[4];
+		}
+		
+	}
+	print join("\t",("chrom","start","end","alt5s","sp;unsp","strand")),"\n";
+	foreach my $k (keys %res){
+		my ($chrom,$strand,$start)=split/\t/,$k;
+		my @br=$strand eq "+" ? sort {$b<=>$a} keys %{$res{$k}} : sort {$a<=>$b} keys %{$res{$k}};
+		my @ss=(); my @uu=();
+		foreach my $x (@br){
+			my $s=defined $res{$k}{$x}{"s"}? $res{$k}{$x}{"s"} : 0;
+			my $u=defined $res{$k}{$x}{"u"}? $res{$k}{$x}{"u"} : 0;
+			push @ss,$s;
+			push @uu,$u;
+		}	
+		if(scalar @ss > 1){
+			print join("\t",($chrom, $start, $start+1,
+			join(",",@br),join(",",@ss[0..($#ss-1)]).";".join(",",@uu),
+			$strand)),"\n";
+		}
+	}
+	'
+}
+
+asp.group3ss.test(){
+echo \
+"chr1	100	200	s	1	+
+chr1	50	200	s	11	+
+chr1	100	300	s	2	+
+chr1	100	101	u	3	+
+chr1	199	200	u	4	+
+chr1	299	300	u	5	+" \
+| asp.group3ss - 
+}
+
+asp.jcg(){
+cat $1 | perl -e 'use strict; my %res=();
+	while(<STDIN>){chomp; my @a=split/\t/,$_;
+		my @sizes=split/,/,$a[10];
+		my @starts=split/,/,$a[11];
+		for(my $i=0; $i<$a[9]-1;$i++){
+			my $s=$a[1]+$starts[$i]+$sizes[$i];
+			my $e=$a[1]+$starts[$i+1];
+			my $l=$sizes[$i];
+			my $r=$sizes[$i+1];
+			$a[5]=~tr/-+/+-/;	
+			if($a[5] eq "-"){ my $tmp=$l;$l=$r;$r=$tmp;}
+			push @{$res{$a[0]."\t".$s."\t".$e."\t".$a[5]}{l}},$l;
+			push @{$res{$a[0]."\t".$s."\t".$e."\t".$a[5]}{r}},$r;
+		}
+	}
+	foreach my $k (keys %res){
+		my @a=split/\t/,$k;
+		for(my $i=0; $i< scalar @{$res{$k}{l}}; $i++){
+			print $a[2]-$a[1],"\t",$res{$k}{l}->[$i],"\t",$res{$k}{r}->[$i],"\n";
+		}
+		
+#		print join("\t",@a[0..2]),
+#			"\t",join(",",@{$res{$k}{l}}),
+#			"\t",join(",",@{$res{$k}{r}}),"\t",$a[3],"\n";
+	}
+'
+}
+asp.jcg.test(){
+echo \
+"chr1	1000	2000	a	255	+	1000	2000	0,0,0	2	10,20	0,980
+chr1	1001	2001	a	255	+	1001	2001	0,0,0	2	9,21	0,979
+chr1	1002	2002	a	255	+	1002	2002	0,0,0	2	8,22	0,978
+chr1	1009	1019	a	255	+	1009	1019	0,0,0	1	10	0
+chr1	1010	1020	a	255	+	1010	1020	0,0,0	1	10	0
+chr1	1011	1021	a	255	+	1011	1021	0,0,0	1	10	0
+chr1	1979	1989	a	255	+	1979	1989	0,0,0	1	10	0
+chr1	1980	1990	a	255	+	1980	1990	0,0,0	1	10	0
+chr1	1981	1991	a	255	+	1981	1991	0,0,0	1	10	0" | asp.jcg -
+}
+asp.lru(){
+	echo '
+	my $S="'$1'";
+	my @tmp=split/ +/,"'${@:2}'";
+	my %F=(); 
+	my $i=0;
+	foreach my $e (@tmp){
+		my @es=split/:/,$e;
+		if (scalar @es > 1){ $F{$es[0]}{$es[1]}=1;
+		}else{ $F{"tag".$i}{$e}=1; 
+		}
+		$i++;
+	}
+
+	#foreach my $k(keys %F){ foreach my $k1 (keys %{$F{$k}}){ print $k," ",$k1,"\n"; }}
+
+	my @T=keys %F;
+	my %L=(); my %R=(); my %U=();
+	## preprocessing 
+	$i=0;
+	foreach my $tag (@T){
+		foreach my $f (keys %{$F{$tag}}){
+			open my $fh,"<",$f or die "cannot open $f";
+			while(<$fh>){ chomp;my @a=split/\t/,$_;
+				if( $S eq "a"){ $a[5]="+";
+				}elsif($S eq "S"){ $a[5]=~tr/+-/-+/; } 
+				my $s=$a[1]; my $e=$a[2]-1; if($a[5] eq "-"){ $s=$a[2]-1;$e=$a[1];}
+				my $k=$a[0]."\t".$a[5];
+					
+				if($a[3] eq "s"){
+					$L{$k}{$s}{$e}{$tag}+=$a[4];
+					$R{$k}{$e}{$s}{$tag}+=$a[4];
+				}elsif($a[3] eq "u"){
+					$U{$k}{$s}{$tag}+=$a[4];
+				}
+			}
+			close($fh);
+		}
+	}
+'
+}
+asp.lru.test(){
+asp.lru S a:f1 b:f2
+}
+asp.m3ss(){
+usage(){ echo "
+USAGE: $FUNCNAME <tag>:<jc.bed> [<tag>:<jc.bed .. ]
+	[options]: 
+	 -a : ignore read strands 
+	 -s : count read in the same strand 
+	 -S : swich read strands 
+" 
+}
+if [ $# -lt 1 ];then usage; return; fi
+        local OPTIND; local S="a";
+        while getopts ":sSa" arg; do
+                case $arg in
+                        S) S="S";;
+                        s) S="s";;
+                        \?) echo "Invalid -${OPTARG}"; return;;
+                esac
+        done
+        shift $(( $OPTIND - 1 ))
+	local cmd=`asp.lru $S $@`
+	cmd="$cmd"'use strict; 
+	print "chrom\t3ss\t5ss\tnum.5ss\tstrand\t",join("\t",@T),"\n";
+	foreach my $k (keys %R){
+		my ($c,$st)=split/\t/,$k;
+	foreach my $s (keys %{$R{$k}}){
+		my @es=();
+		if($st eq "+"){ @es= sort {$a<=>$b} ($s, keys %{$R{$k}{$s}});
+		}else{  @es= sort {$b<=>$a} ($s, keys %{$R{$k}{$s}});}
+		print $c,"\t",$s,"\t",join(",",@es),"\t",scalar @es,"\t$st";
+		foreach my $t (@T){
+			my @vs=(); my @us=();
+			foreach my $e (@es){	
+				my $v=$R{$k}{$s}{$e}{$t}; $v =0 unless defined $v;
+				push @vs,$v;
+				my $u=$U{$k}{$e}{$t}; $u =0 unless defined $u;
+				push @us,$u;
+			}
+			print "\t",join(",",@vs);
+			print ";",join(",",@us);
+		}
+		print "\n";
+	}}
+	'
+#	bed.3p $1 #| sort -k1,1 -k2,2n | groupBy -g 1,2,6 -c 3,4,5 -o collapse,collapse,collapse
+#	bed.sort $1 | mergeBed -c 2,3,4,5 -s -o collapse,collapse,collapse,collapse \
+#	| perl -ne 'chomp;my @a=split/\t/,$_;
+#		my $n=join(";",( @a[4..6] ));
+#		my $m=$a[7];
+#
+#		## chr start end starts;ends;jcs;jucs,jdcs n.jcs strand
+#		print join("\t",(@a[0..2],$n,$m,$a[3])),"\n";
+#	'
+	perl -e "$cmd";
+}
+
+asp.m3ss.test(){
+echo \
+"chr1	100	200	s	1	+
+chr1	50	200	s	11	+
+chr1	100	300	s	2	+
+chr1	100	101	u	3	+
+chr1	199	200	u	4	+
+chr1	299	300	u	5	+" > tmp.a
+
+cat tmp.a
+echo "result1"
+asp.m3ss tmp.a
+echo "result2"
+asp.m3ss -S tmp.a
+rm tmp.a
+}
+
 asp.ce(){
 usage(){ echo "
 FUNCT: generate cassettee exon events using junction files
@@ -151,7 +416,7 @@ if [ $# -lt 1 ];then  usage; return; fi
 			my @y=split/,/,$x; my ($in,$ex)=(0,0);
 			for(my $i=0; $i<=$#y; $i++){
 				if($i==1 || $i==2){ $in+=$y[$i];
-				}elsif($i==0 || $i==4 || $i==5){ $ex+=$y[$i] }
+				}elsif($i==0){ $ex+=$y[$i] }
 			}
 			return( $ex."\t".$in);
 		}	
@@ -309,34 +574,6 @@ chr1	1011	1021	a	255	+	1011	1021	0,0,0	1	10	0
 chr1	1979	1989	a	255	+	1979	1989	0,0,0	1	10	0
 chr1	1980	1990	a	255	+	1980	1990	0,0,0	1	10	0
 chr1	1981	1991	a	255	+	1981	1991	0,0,0	1	10	0" | asp.jc -
-}
-asp.jc31(){
-usage(){ echo "
-USAGE: $FUNCNAME <jc.bed> 
-	[options]: 
-	 -s : count read in the same strand 
-" 
-}
-if [ $# -lt 1 ];then usage; return; fi
-	bed.3p $1 | sort -k1,1 -k2,2n | groupBy -g 1,2,6 -c 3,4,5 -o collapse,collapse,collapse
-#	bed.sort $1 | mergeBed -c 2,3,4,5 -s -o collapse,collapse,collapse,collapse \
-#	| perl -ne 'chomp;my @a=split/\t/,$_;
-#		my $n=join(";",( @a[4..6] ));
-#		my $m=$a[7];
-#
-#		## chr start end starts;ends;jcs;jucs,jdcs n.jcs strand
-#		print join("\t",(@a[0..2],$n,$m,$a[3])),"\n";
-#	'
-}
-
-asp.jc31.test(){
-echo \
-"chr1	100	200	s	1	+
-chr1	100	300	s	2	+
-chr1	100	101	u	3	+
-chr1	199	200	u	4	+
-chr1	299	300	u	5	+" | asp.jc3 -
-
 }
 
 asp.jcprep_ef(){

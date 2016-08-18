@@ -1,6 +1,97 @@
 . $HMHOME/src/polya.sh;
 . $HMHOME/src/bed.sh;
 . $HMHOME/src/stat.sh;
+pcpa.bygene(){
+cat $1 | perl -ne 'chomp; my @a=split/\t/,$_;
+	my $n=$#a-5;	
+	my $k=join("@",($a[3],@a[(6+$n/2)..(5+$n)]));
+	print $k,"\t",join("\t",@a[6..(5+$n/2)]),"\n";	
+' | stat.sum - 1 \
+| perl -ne 'chomp; my @a=split /\t/,$_;
+	my @b=split/@/,$a[0];
+	print $b[0];
+	print "\t",join("\t",@a[1..$#a]);
+	print "\t",join("\t",@b[1..$#b]);
+	print "\n";
+	#print "\t",join("\t",@a[1..$#a]),"\n";
+#		join(",",@a[1..2]),"\n";
+#		join("\t",@b[6..$#b]),"\n";
+' 
+}
+
+pcpa.bygene.test(){
+echo  \
+"chrom	start	end	geneinfo	score	strand	count.ctr	count.trt	total.ctr	total.trt
+c	310	311	c;300;400;gene2;0;+	11.00	+	1	2	10	6
+c	300	301	c;300;400;gene2;0;+	10.00	+	0	2	10	6
+c	399	400	c;300;400;gene2;0;+	11.00	+	1	2	10	6
+c	110	111	c;100;200;gene1;0;+	11.00	+	1	2	10	20
+c	120	121	c;100;200;gene1;0;+	11.00	+	1	3	10	20" \
+> tmp.a
+pcpa.bygene tmp.a
+rm tmp.a
+}
+pcpa.test_prop(){
+usage(){ echo "
+	$FUNCNAME <pcpa.prep> <ctr> <trt> [method]
+	[method] : bypcpa (default), bygene 
+"
+}
+if [ $# -lt 3 ]; then usage; return; fi
+local M=${4:-"bypcpa"};
+	cat $1 | perl -e 'use strict; 
+		my $ctr="'$2'";my $trt="'$3'"; my $M="'$M'";
+		my %res=(); my %h=(); 
+		my $head_str="";
+		my $ID;
+		while(<STDIN>){chomp; my @a=split/\t/,$_;
+			if( $M eq "bypcpa"){ $ID=join("@",@a[0..5]);
+			}else{ $ID=$a[3]; }
+			if($head_str eq ""){ 
+				$head_str=join("\t",($ID,$ctr.".cnt",$trt.".cnt", $ctr.".tot",$trt.".tot"));
+				for(my $i=0; $i<=$#a;$i++){ 
+					if($a[$i] =~ /(\w+)\.(\w+)/ && ($2 eq $ctr || $2 eq $trt)){
+						$h{$2}{$1} = $i;
+				} }  
+				next;
+			}
+
+			foreach my $k (keys %h){
+			foreach my $k2 (keys %{$h{$k}}){
+				if($k2 eq "count"){
+					$res{$ID}{$k}{$k2} += $a[ $h{$k}{$k2} ];
+				}else{
+					$res{$ID}{$k}{$k2} = $a[ $h{$k}{$k2} ];
+				}
+			}}
+		}
+		print $head_str,"\n";
+		foreach my $k (keys %res){
+			print $k,"\t",$res{$k}{$ctr}{count},"\t",$res{$k}{$trt}{count},
+				"\t",$res{$k}{$ctr}{total},"\t",$res{$k}{$trt}{total},"\n";
+		}
+		#foreach my $k( keys %h){ print $k," ",join( ",",keys %{$h{$k}}),"\n"; }
+	'| stat.prop_test - T 
+}
+
+pcpa.test_prop.test(){
+echo  \
+"chrom	start	end	geneinfo	score	strand	count.ctr	count.trt	total.ctr	total.trt
+c	310	311	c;300;400;gene2;0;+	11.00	+	1	2	10	6
+c	300	301	c;300;400;gene2;0;+	10.00	+	0	2	10	6
+c	399	400	c;300;400;gene2;0;+	11.00	+	1	2	10	6
+c	110	111	c;100;200;gene1;0;+	11.00	+	1	2	10	20
+c	120	121	c;100;200;gene1;0;+	11.00	+	1	3	10	20" \
+> tmp.a
+pcpa.test_prop tmp.a ctr trt 
+pcpa.test_prop tmp.a ctr trt  bygene
+rm tmp.a
+}
+
+pcpa.anno(){
+#using transcripts make annotation reference
+echo "hi"
+}
 
 pcpa.prep(){
 usage(){ echo "
@@ -118,11 +209,11 @@ usage(){
 pcpa.test.test(){
 echo  \
 "chrom	start	end	geneinfo	score	strand	count.ctr	count.trt	total.ctr	total.trt
-c	310	311	c;300;400;gene2;0;+	11.00	+	1	10	2	30
-c	300	301	c;300;400;gene2;0;+	10.00	+	0	10	2	30
-c	399	400	c;300;400;gene2;0;+	11.00	+	1	10	2	30
-c	110	111	c;100;200;gene1;0;+	11.00	+	1	10	3	20
-c	120	121	c;100;200;gene1;0;+	11.00	+	1	10	3	20" \
+c	310	311	c;300;400;gene2;0;+	11.00	+	1	2	10	2
+c	300	301	c;300;400;gene2;0;+	10.00	+	0	2	10	2
+c	399	400	c;300;400;gene2;0;+	11.00	+	1	2	10	2
+c	110	111	c;100;200;gene1;0;+	11.00	+	1	2	10	3
+c	120	121	c;100;200;gene1;0;+	11.00	+	1	3	10	20" \
 | pcpa.test - proportion ctr trt 
 }
 
