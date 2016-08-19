@@ -23,7 +23,7 @@ if [ $# -ne 2];then echo "$usage";return; fi
 
 }
 
-fq.cut3p_go(){
+fastq.cut3p_go(){
 usage="$FUNCNAME <input> <3adaptor> [<num_mis_match>]";
 local cmd='
 package main
@@ -84,7 +84,7 @@ local tmp=`mymktempd`; echo "$cmd" > $tmp/script.go;
 cat $1 | go run $tmp/script.go
 
 }
-fq.cut3p_go.test(){
+fastq.cut3p_go.test(){
 echo \
 "@a
 CGGGCTTGAACACG
@@ -103,7 +103,7 @@ CGGGCTTGAACACG
 +
 IIIIIIIIIIIIII"  > tmp.a
 
-fq.cut3p_go tmp.a GAAC  
+fastq.cut3p_go tmp.a GAAC  
 #fq.cut3 tmp.a GAAC 
 #fq.cut3 tmp.a GAACACG 
 #fq.cut3 tmp.a AGAACACG 1 
