@@ -17,7 +17,7 @@ if [ $# -ne 2 ];then echo "$usage";return; fi
                 my @b=split /\s+/,$a[0];
                 $a[0] = $b[0].":".substr($a[1],0,$L);
                 $a[1] = substr($a[1],$L);
-                $a[3] = substr($a[1],$L);
+                $a[3] = substr($a[3],$L);
                 print join("\n",@a),"\n";
         '
 
