@@ -11,7 +11,7 @@ usage="
 FUNCTION: Cut 5p barcode and add it to the header (at the end of first non-space tocken)
 USAGE: $FUNCNAME <fastq> <len>
 "
-if [ $# -ne 2];then echo "$usage";return; fi
+if [ $# -ne 2 ];then echo "$usage";return; fi
 	fastq.flat $1 \
         | perl -ne 'chomp; my @a=split/\t/,$_; my $L="'$2'";
                 my @b=split /\s+/,$a[0];
