@@ -132,7 +132,7 @@ mycat(){
         fi
 }
 
-	if [ $# -ne 1 ]; then echo "$usage"; exit -1; fi
+	if [ $# -ne 1 ]; then echo "$usage"; return ; fi
 	mycat $1 | python -c "$tmp"
 }
 
