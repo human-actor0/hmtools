@@ -2,9 +2,13 @@
 
 
 splicing.count_3ss(){
-usage="$FUNCNAME <intron3p.bed> <read.bed12> [<options>]"
+usage="$FUNCNAME <intron3p.bed> <read.bed12> [options]
+ [options]:
+	-s : count reads on the same strand 
+	-S : count reads on the opposite strand 
+"
 if [ $# -lt 2 ];then echo "$usage"; return; fi
-        intersectBed -a ${1/-/stdin} -b ${2/-/stdin} -wa -wb ${3:-} \
+        intersectBed -a ${1/-/stdin} -b ${2/-/stdin} -wa -wb ${@:3} \
         | perl -e 'use strict; my %res=(); 
         while(<STDIN>){ chomp; my @a=split/\t/,$_;
                 my $tstart=$a[1]; my $tend=$a[2]; 
