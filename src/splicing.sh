@@ -1,5 +1,41 @@
 . $HMHOME/src/bed.sh;
 
+
+splicing.count_3ss(){
+usage="$FUNCNAME <intron3p.bed> <read.bed12> [<options>]"
+if [ $# -lt 2 ];then echo "$usage"; return; fi
+        intersectBed -a ${1/-/stdin} -b ${2/-/stdin} -wa -wb ${3:-} \
+        | perl -e 'use strict; my %res=(); 
+        while(<STDIN>){ chomp; my @a=split/\t/,$_;
+                my $tstart=$a[1]; my $tend=$a[2]; 
+                my @sizes=split/,/,$a[16]; my @starts=split/,/,$a[17];
+                ## handle crossing reads
+                my $us=0; ## unsplicing my $sp=0; ## splicing
+                for( my $i=0; $i< $a[15]; $i++){
+                        my $s1=$a[7]+$starts[$i];
+                        my $e1=$s1+$sizes[$i];
+                        if( $tstart >= $s1 && $tstart < $e1){ 
+                                $res{ join("\t",@a[0..5]) }{U} ++;
+                        }
+                }
+                for( my $i=1; $i< $a[15]; $i++){
+                        my $s1=$a[7]+$starts[$i-1]+$sizes[$i-1];
+                        my $e1=$s1+$starts[$i];
+                        if($a[5] eq "+" && $tstart == $e1-1 || $a[5] eq "-" && $tstart == $s1){
+                                $res{ join("\t",@a[0..5]) }{S} ++;
+                        }
+                }
+        }
+        foreach my $k (keys %res){
+                my $u=defined $res{$k}{U} ? $res{$k}{U} : 0;
+                my $s=defined $res{$k}{S} ? $res{$k}{S} : 0;
+                print $k,"\t",$s,"\t",$u,"\n";
+        }
+        '
+}
+
+
+
 splicing.junction(){
 usage(){ echo "
 Usage : $FUNCNAME <bed12> <out>
