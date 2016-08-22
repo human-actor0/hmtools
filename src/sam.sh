@@ -112,17 +112,9 @@ if [ $# -lt 1 ]; then echo "$usage"; return; fi
 		my $gseq=""; # genomic sequence 
 		#\*|([0-9]+[MIDNSHPX=])+ 
 		my $pos=0; 
-		my @starts=(); my @sizes=(); my @soft_clip=();
+		my @starts=(); my @sizes=(); ## prepare for bed12 
 
-		## handle soft clipping
-		if( $cigar=~/^(\d+)S/){
-			$start += $1;
-		}
-		if( $cigar=~/(\d+)S$/){
-			
-		}
-		$cigar=~s/\d+S//g; ## remove soft clipping 
-
+		my $offset=0;
 		while($cigar=~/(\d+)([MIDNSHPX=])/g){ 
 			my ($x,$c)=($1,$2);
 			if($c=~/[MX=]/){
@@ -133,11 +125,15 @@ if [ $# -lt 1 ]; then echo "$usage"; return; fi
 			}elsif($c=~/[DN]/){
 				#$gseq .= "*"x$x;
 				$pos += $x; ## intron ..
+			}elsif($c=~/[S]/){
+			## aware that soft/hard clipping does not affect genomic coordinates 
+			## ,but it affects mapped sequence
+				$offset += $x;
 			}else{
 				## I/P is not handled
 			}
 		}
-		my $end=$start+$pos;
+		my $end=$start+$starts[$#starts]+$sizes[$#sizes];
 		print join("\t",( 
 			$chrom,$start,$end,$id,$mapq,$strand,
 			$start,$end,"0,0,0",scalar @starts,
