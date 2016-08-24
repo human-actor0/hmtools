@@ -13,11 +13,11 @@ cat $1 | perl -ne 'use strict; chomp;
 		my $a=$S[$i-1];
 		my $b=$S[$i];
 		my $p=$i-1; ## original position before the padding
-		if( ($a eq " " || $a eq "-") && $b =~ /[eErR]/){
+		if( ($a eq " " || $a eq "-") && $b =~ /[\w]/){
 			$type=$b;
 			if( $a eq " "){ $start=$p;}
 			push @starts,$p-$start;
-		}elsif($a =~ /[eErR]/ && ($b eq " " || $b eq "-")){
+		}elsif($a =~ /[\w]/ && ($b eq " " || $b eq "-")){
 			push @sizes, $p - $starts[$#starts] - $start;
 		}
 	}
@@ -48,7 +48,7 @@ ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTAC
 " | splicing.toy -
 }
 
-splicing.count_3SS(){
+splicing.count_3US(){
 usage="
 FUNCT: count splicing events occuring at 3 prime splicing sites
 USAGE: $FUNCNAME <intron3p.bed> <read.bed12> <window> <min_splicing_dist> [options]
@@ -57,14 +57,15 @@ USAGE: $FUNCNAME <intron3p.bed> <read.bed12> <window> <min_splicing_dist> [optio
 	-S : count reads on the opposite strand 
 "
 
-if [ $# -lt 4 ];then echo "$usage"; return; fi
-        intersectBed -a ${1/-/stdin} -b ${2/-/stdin} -wa -wb ${@:5} \
-        | perl -e 'use strict; my %res=(); my $W='$3'; my $M='$4';
+if [ $# -lt 3 ];then echo "$usage"; return; fi
+        intersectBed -a ${1/-/stdin} -b ${2/-/stdin} -wa -wb ${@:4} \
+        | perl -e 'use strict; my %res=();  
+		my $D='$3'; ## minimum junction distance
 	sub same3{
 		my ($s1,$e1,$s2,$e2,$strand) = @_;
 		my $res=0;
 		if($strand eq "+" && $e1==$e2 || $strand eq "-" && $s1==$s2){ $res=1;}
-		print join(",",@_),"=>",$res,"\n";
+		#print join(",",@_),"=>",$res,"\n";
 		return $res;
 	}
 	sub within{
@@ -72,78 +73,69 @@ if [ $# -lt 4 ];then echo "$usage"; return; fi
 		if( $s1 >= $s2 && $e1 <= $e2){ return 1;}
 		return 0;
 	}
-	sub cross{
-		my ($s1,$e1,$s2,$e2) = @_;
-		if( $s1 < $s2 && $e1 > $e2){ return 1;}
-		return 0;
-	}
         while(<STDIN>){ chomp; my @a=split/\t/,$_;
                 my $tstart=$a[1]; my $tend=$a[2]; my $tstrand=$a[5]; 
                 my @sizes=split/,/,$a[16]; my @starts=split/,/,$a[17];
                 ## handle crossing reads
                 my $us=0; ## unsplicing events
-		my @tags=();
-            #    for( my $i=0; $i< $a[15]; $i++){
-            #            my $s1=$a[7]+$starts[$i];
-            #            my $e1=$s1+$sizes[$i];
-	    #    	my $tag="";
-	    #    	print join(" ",($s1,$e1,$tstart,$tend)),"\n";
-	    #    	if( same3($s1,$e1,$tstart,$tend)){ 	
-	    #    		if($e1-$s1 > $W){ $tag="S";
-	    #    		}else{$tag="U";}
-	    #    	}
-	    #    	if($tag ne ""){
-	    #    		$res{ join("\t",@a[0..5]) }{$tag} ++;
-	    #    	}
-            #    }
+		my %tags=();
+		if(within($tstart,$tend,$a[7]+$starts[0], $a[7]+$starts[0]+$sizes[0])){
+					#print $a[9],"---\n";
+			$tags{"U"} = 1;
+		}
                 for( my $i=1; $i< $a[15]; $i++){ ### extranc intronic to count splicing reads 
                         my $s1=$a[7]+$starts[$i-1];
                         my $e1=$s1+$sizes[$i-1];
                         my $s2=$a[7]+$starts[$i];
                         my $e2=$s2+$sizes[$i];
-			if( $e2-$s1 > $M &&
-				same3($e1,$s2,$tstart,$tend,$tstrand)){ 
-				push @tags,"S"; 
-			}elsif( cross($s1,$e1,$tstart,$tend) ){
-				push @tags,"U"; 
+			#print join(",",($s1,$e1,$s2,$e2)),"\n";
+			if( $s2-$e1 >= $D){
+				if(same3($e1,$s2,$tstart,$tend,$tstrand)){ 
+					$tags{"S"} = 1;
+				}elsif( within($tstart,$tend,$s2,$e2) ){
+					$tags{"U"} = 1;
+				}
+				
+			}elsif( within($tstart,$tend,$s1,$e2) ){
+				$tags{"U"} = 1;
 			}
                 }
-		foreach my $t (@tags){
+		foreach my $t (keys %tags){
 	    		$res{ join("\t",@a[0..5]) }{$t} ++;
 		}
         }
         foreach my $k (keys %res){
-		print $k,"\n";
-		foreach my $tag (keys %{$res{$k}}){
-			print $tag," ",$res{$k}{$tag},"\n";
-		}
-               # my $U=defined $res{$k}{U} ? $res{$k}{U} : 0;
-               # my $S=defined $res{$k}{S} ? $res{$k}{S} : 0;
-               # my $u=defined $res{$k}{u} ? $res{$k}{u} : 0;
-               # my $s=defined $res{$k}{s} ? $res{$k}{s} : 0;
-               # print join("\t",($S,$U,$s,$u)),"\n";
+		print join("\t",($k,
+			join(",",(
+			defined $res{$k}{U} ? $res{$k}{U} : 0,
+			defined $res{$k}{S} ? $res{$k}{S} : 0
+			))
+		)),"\n";
         }
         '
 }
 
-splicing.count_3SS.test(){
+splicing.count_3US.test(){
 echo \
-"chr1	150	210	U	0	+	150	210	0,0,0	2	10,10	0,50
-chr1	180	210	S	0	+	180	210	0,0,0	2	10,10	0,20
-chr1	100	210	r1	0	+	100	210	0,0,0	2	10,10	0,100
-chr1	0	210	r2	0	+	0	210	0,0,0	2	10,10	0,200
-chr1	191	201	r3	0	+	191	201	0,0,0	1	10	0
-chr1	189	199	r3	0	+	189	199	0,0,0	1	10	0
-chr1	192	202	r4	0	+	192	202	0,0,0	1	10	0
-chr1	199	209	r5	0	+	199	209	0,0,0	1	10	0
-chr1	200	210	r6	0	+	200	210	0,0,0	1	10	0
-chr1	300	310	r7	0	+	300	310	0,0,0	1	10	0" > tmp.read
-
-echo \
-"chr1	199	200	intron3p	0	+
-chr1	110	111	intron3p	0	-" > tmp.intron3p
-
-splicing.count_3SS tmp.intron3p tmp.read 50 20
+"
+1234567890123456789012345678901234567890123456789
+CGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTAC
+                 I 
+     i
+  RRR-------------RR
+   rr-------------rrrrrr
+              rr--rrrrrr
+               RRR--------------RR
+                 RRRR 
+               rr-rrrrrr
+                  RRRR 
+  RRR--------------RR
+" | splicing.toy - > tmp.tmp
+cat tmp.tmp | awk '$4~/[Rr]/' > tmp.read
+cat tmp.tmp | awk '$4~/[Ii]/' | cut -f1-6> tmp.intron
+splicing.count_3US tmp.intron tmp.read 2
+head tmp.*
+rm tmp.*
 
 }
 
