@@ -1,11 +1,51 @@
 . $HMHOME/src/bed.sh;
 
-myopt_rd(){
- 	local cmd='my $re='$@'; if($_=~/$re/){ ; print $1;'
+
+splicing.toy(){
+usage="$FUNCNAME <intput.txt>"
+if [ $# -lt 1 ];then echo "$usage"; return; fi
+cat $1 | perl -ne 'use strict; chomp; 
+	my @S=split//," ".$_." "; ## add pads for eacy calc.
+	my @sizes=(); my @starts=();
+	my $type="";
+	my $start=0;
+	for(my $i=1; $i< scalar @S; $i++){ 
+		my $a=$S[$i-1];
+		my $b=$S[$i];
+		my $p=$i-1; ## original position before the padding
+		if( ($a eq " " || $a eq "-") && $b =~ /[eErR]/){
+			$type=$b;
+			if( $a eq " "){ $start=$p;}
+			push @starts,$p-$start;
+		}elsif($a =~ /[eErR]/ && ($b eq " " || $b eq "-")){
+			push @sizes, $p - $starts[$#starts] - $start;
+		}
+	}
+	if( $type ne ""){
+		my $strand = $type eq uc $type ? "+" : "-";
+		my $end = $start + $starts[$#starts] + $sizes[$#sizes];
+		print join("\t",(
+			"chr1",
+			$start, $end,
+			$type, 0, $strand,
+			$start, $end,
+			"0,0,0",scalar @starts,
+			join(",",@sizes),join(",",@starts)
+		)),"\n";
+	}
+'
 }
-myopt_rm(){
-	echo "$2";
- 	cat $1 | perl -ne '$2=~s/ /\print " '$2'";' #my $re='"$2"'; '#chomp; $_=~s/$re//g; print $_;'
+
+splicing.toy.test(){
+echo \
+"01234567890123456789012345678901234567890123456789
+ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTAC
+ EEEE-------------EEEEEEEE------------EEEEEEEEEEEE
+  RRR-------------RR
+   rr-------------rrrrrr
+                RRRR 
+                                    RRRRR
+" | splicing.toy -
 }
 
 splicing.count_3SS(){
