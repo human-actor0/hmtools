@@ -64,7 +64,8 @@ func main() {
 				fmt.Printf("%s\n",bufs[2])
 				fmt.Printf("%s\n",bufs[3][:i])
 				//fmt.Printf("%s\n",strings.Join(bufs,"\n"))
-				break; }
+				break; 
+			}
 		}
 		bufs= nil;
 	}
