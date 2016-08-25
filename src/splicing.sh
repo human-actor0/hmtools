@@ -17,7 +17,7 @@ perl -e 'use strict;
 			for(my $j=0; $j < $#a-5; $j++){
 				my $tagj=$tag.".c".$j;
 				$cols->{$tagj}=1;
-				$r->{join("\t",@a)}{$tagj}=$a[$j+6];
+				$r->{join("\t",@a[0..5])}{$tagj}=$a[$j+6];
 			}
 		}	
 		close($fh);
@@ -54,7 +54,7 @@ chr1	50	200	s	0	-	5	6
 chr1	200	201	u	0	-	7	8
 chr1	199	200	u	0	+	9	10" > tmp.a
 
-splicing.table tmp.a,tmp.a tmp.a,tmp.a
+splicing.table tmp.a tmp.a,tmp.a
 
 }
 splicing.toy(){
