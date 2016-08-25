@@ -33,10 +33,10 @@ perl -e 'use strict;
 		readf($f,\%res,"trt".$i,$option,\%cols); $i++;
 	}
 	print join("\t",("chrom","start","end","name","score","strand")),"\t";
-	print join("\t",keys %cols),"\n";
+	print join("\t",sort keys %cols),"\n";
 	foreach my $k (keys %res){
 		print $k;
-		foreach my $c (keys %cols){
+		foreach my $c (sort keys %cols){
 			my $v=0; $v=$res{$k}{$c} if defined $res{$k}{$c};
 			print "\t",$v;
 		}
