@@ -106,7 +106,7 @@ if [ $# -lt 3 ];then echo "$usage"; return; fi
         }
         foreach my $k (keys %res){
 		print join("\t",($k,
-			join(",",(
+			join("\t",(
 			defined $res{$k}{U} ? $res{$k}{U} : 0,
 			defined $res{$k}{S} ? $res{$k}{S} : 0
 			))
