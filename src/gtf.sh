@@ -137,7 +137,7 @@ mycat(){
 }
 
 gtf.bed12(){
-	$HMHOME/bin/gtf2bed $1
+	$HMHOME/bin/gtf2bed $@
 }
 gtf.bed12.test(){
 echo \
