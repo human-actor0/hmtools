@@ -1,4 +1,56 @@
 . $HMHOME/src/bed.sh;
+splicing.table_filter(){
+usage="$FUNCNAME <table> <min>";
+if [ $# -lt 2 ]; then echo "$usage";return ; fi
+	cat $1 | perl -ne 'chomp; my @a=split /\t/,$_; 
+		my $sum=0;foreach my $e (@a[1..$#a]){ $sum += $e;} 
+		if($sum > '$2'  || $a[0] eq "id"){ print $_,"\n";}
+	' 
+}
+splicing.relpos(){
+usage="$FUNCNAME <result_of_intersectBed -a a.bed -b b.bed -wa -wb ...>
+	a.bed : target in bed6
+	b.bed : point in bed
+"
+if [ $# -lt 1 ]; then echo "$usage"; return; fi
+        perl -e 'use strict;  my %res=();
+                while(<STDIN>){chomp; my @a=split/\t/,$_;
+                        $res{join("\t",@a[0..5])}{$a[7]-$a[1]}++;
+                }
+                foreach my $k (keys %res){
+                        print $k,"\t";
+                        print join(",", keys %{$res{$k}}),"\t";
+                        print join( ",", map {$res{$k}{$_}}keys %{$res{$k}}),"\n";
+                }
+        '
+
+}
+
+splicing.relpos_to_table(){
+usage="$FUNCNAME <relpos> <min> <max>"
+if [ $# -ne 3 ];then echo "$usage"; return; fi
+	cat $1 | perl -e 'use strict;  my $MIN='$2'; my $MAX='$3';
+	my %res=();
+	while(<STDIN>){ chomp; my @a=split/\t/,$_;
+		my @x=split/,/,$a[6];
+		my @y=split/,/,$a[7];
+		my $k=join("@",@a[0..5]);
+		for(my $i=0; $i<=$#x; $i++){
+			my $p=$x[$i];
+			if( $a[5] eq "-" ){ $p = $MAX-$p;}
+			$res{$k}{$p} += $y[$i];
+		}
+	}
+	print join("\t",("id", ($MIN..$MAX))),"\n";
+	foreach my $k ( keys %res){
+		print $k;
+		for(my $i=$MIN; $i<=$MAX; $i++){
+			my $v= defined $res{$k}{$i} ? $res{$k}{$i} : 0;
+			print "\t$v";
+		}	
+		print "\n";
+	}' 
+}
 
 splicing.table(){
 usage="$FUNCNAME <ctr.3su>[,<ctr.3su..] <trt.3su>[,<trt.3su>] [options]
