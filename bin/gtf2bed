@@ -26,7 +26,9 @@ use Data::Dumper;
 use Getopt::Long;
 
 my $extended;
+my $EXTENDED;
 GetOptions("x"=>\$extended);
+GetOptions("X"=>\$EXTENDED);
 
 $in = shift @ARGV;
 
@@ -109,12 +111,14 @@ for $id (
 		my $exst = join ",", map {$_->[3]-$beg-1} @ex;				# exon start
 		my $exsz = join ",", map {$_->[4]-$_->[3]+1} @ex;			# exon size
 
-        my $gene_id;
+        my $gene_id="null";
+	my $gene_name="null";
         my $extend = "";
+	
         if ($extended) {
-    	    ($gene_id) = $attr =~ /gene_name "([^"]+)"/;
-    	    ($gene_id) = $attr =~ /gene_id "([^"]+)"/ unless $gene_id;
-            $extend="\t$gene_id";
+    	    ($gene_name) = $attr =~ /gene_name "([^"]+)"/;
+    	    ($gene_id) = $attr =~ /gene_id "([^"]+)"/;
+            $extend="\t$gene_id\t$gene_name";
         }
 		# added an extra comma to make it look exactly like ucsc's beds
 		print "$chr\t$beg\t$end\t$id\t0\t$dir\t$cds\t$cde\t0\t$exn\t$exsz,\t$exst,$extend\n";
